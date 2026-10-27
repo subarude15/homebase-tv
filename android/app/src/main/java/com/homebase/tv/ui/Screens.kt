@@ -21,7 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
-private val CardPadding = PaddingValues(vertical = 12.dp, horizontal = 8.dp)
+// Room for the focused card's scale-up so its border isn't clipped.
+private val CardPadding = PaddingValues(vertical = 12.dp, horizontal = 16.dp)
 
 @Composable
 fun HomeScreen(state: LauncherState, onLaunch: (String) -> Unit, firstItemFocus: FocusRequester) {

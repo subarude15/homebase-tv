@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,6 +19,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -80,20 +87,41 @@ private fun Field(
     onChange: (String) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Read-only until OK is pressed, so D-pad focus passing through doesn't pop the keyboard.
+    var editing by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
     val colors = MaterialTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
         BasicTextField(
             value = value,
             onValueChange = onChange,
+            readOnly = !editing,
             singleLine = true,
             textStyle = TextStyle(color = colors.onSurface, fontSize = 18.sp),
             cursorBrush = SolidColor(colors.onSurface),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                editing = false
+                keyboard?.hide()
+            }),
             modifier = Modifier
                 .fillMaxWidth()
-                .onFocusChanged { focused = it.isFocused }
+                .onFocusChanged {
+                    focused = it.isFocused
+                    if (!it.isFocused) editing = false
+                }
+                .onPreviewKeyEvent { e ->
+                    val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                    if (!editing && ok && e.type == KeyEventType.KeyUp) {
+                        editing = true
+                        keyboard?.show()
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .border(2.dp, if (focused) colors.primary else colors.border, RoundedCornerShape(8.dp))
                 .padding(12.dp),
         )
