@@ -1,0 +1,101 @@
+package com.homebase.tv.ui
+
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Button
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.FilterChip
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.homebase.tv.data.settings.TvName
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SettingsScreen(vm: SettingsViewModel) {
+    val saved by vm.settings.collectAsStateWithLifecycle()
+    val status by vm.status.collectAsStateWithLifecycle()
+    val s = saved ?: return
+
+    var url by remember(s.backendUrl) { mutableStateOf(s.backendUrl) }
+    var token by remember(s.apiToken) { mutableStateOf(s.apiToken) }
+    var tvName by remember(s.tvName) { mutableStateOf(s.tvName) }
+
+    Column(Modifier.width(640.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Field("Backend URL", url, KeyboardType.Uri) { url = it }
+        Field("API token", token, KeyboardType.Password, password = true) { token = it }
+        Text("This TV", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TvName.entries.forEach { t ->
+                FilterChip(selected = t == tvName, onClick = { tvName = t }) { Text(t.label) }
+            }
+        }
+        Button(onClick = { vm.saveAndTest(url, token, tvName) }) { Text("Save & test connection") }
+        Text(statusText(status))
+    }
+}
+
+private fun statusText(status: ConnectionStatus): String = when (status) {
+    ConnectionStatus.Idle -> ""
+    ConnectionStatus.Testing -> "Testing…"
+    is ConnectionStatus.Ok -> with(status.health) {
+        when {
+            !authenticated -> "Reached backend v$version, but the API token was rejected"
+            !database -> "Connected to backend v$version, but its database is unhealthy"
+            else -> "Connected to backend v$version"
+        }
+    }
+    is ConnectionStatus.Failed -> "Could not reach backend: ${status.message}"
+}
+
+@Composable
+private fun Field(
+    label: String,
+    value: String,
+    keyboardType: KeyboardType,
+    password: Boolean = false,
+    onChange: (String) -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(color = colors.onSurface, fontSize = 18.sp),
+            cursorBrush = SolidColor(colors.onSurface),
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focused = it.isFocused }
+                .border(2.dp, if (focused) colors.primary else colors.border, RoundedCornerShape(8.dp))
+                .padding(12.dp),
+        )
+    }
+}

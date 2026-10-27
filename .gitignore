@@ -1,0 +1,26 @@
+# Secrets
+.env
+*.keystore
+*.jks
+local.properties
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+data/
+*.db
+
+# Android / Gradle
+.gradle/
+build/
+.idea/
+*.iml
+captures/
+.kotlin/
+
+# OS
+.DS_Store
+Thumbs.db

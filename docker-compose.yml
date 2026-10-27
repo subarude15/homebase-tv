@@ -1,0 +1,10 @@
+services:
+  homebase-backend:
+    build: ./backend
+    container_name: homebase-tv-backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${HOMEBASE_PORT:-8770}:8770"
+    volumes:
+      - ./data:/data
