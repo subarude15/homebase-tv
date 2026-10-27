@@ -91,6 +91,8 @@ def test_image_proxy(tmp_path):
     with make_client(tmp_path, {}) as c:
         ok = c.get("/api/image/ep1/Primary?tag=abc", headers=AUTH)
         assert ok.status_code == 200 and ok.content == b"jpegbytes"
+        real_tag = "cc18ac3e7b64b488ee1fb3f940269056_639133322400000000_4e816f77ad9782edf0852d49fae4e6a1"
+        assert c.get(f"/api/image/16425707/Primary?tag={real_tag}", headers=AUTH).status_code == 200
         assert c.get("/api/image/ep1/Primary?tag=abc").status_code == 401
         assert c.get("/api/image/..%2Fetc/Primary", headers=AUTH).status_code in (404, 422)
         assert c.get("/api/image/ep1/Secret", headers=AUTH).status_code == 422

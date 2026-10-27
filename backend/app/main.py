@@ -88,7 +88,7 @@ def create_app(settings: Settings | None = None, emby_transport: httpx.AsyncBase
     async def image(
         kind: ImageKind,
         item_id: str = Path(pattern=r"^[A-Za-z0-9]+$"),
-        tag: str = Query("", pattern=r"^[A-Za-z0-9]*$"),
+        tag: str = Query("", pattern=r"^[A-Za-z0-9_-]*$"),
         width: int = Query(480, ge=50, le=1920),
         emby: EmbyClient = Depends(require_emby),
     ):
