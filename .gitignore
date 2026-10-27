@@ -10,7 +10,9 @@ __pycache__/
 .venv/
 .pytest_cache/
 *.egg-info/
-data/
+# Backend volume (compose mounts ./data → /data). Anchor to repo root —
+# a bare "data/" also ignored android/.../data and dropped Phase 1A/1B sources.
+/data/
 *.db
 
 # Android / Gradle
