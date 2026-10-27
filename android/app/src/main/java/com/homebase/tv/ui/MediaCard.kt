@@ -65,7 +65,8 @@ fun MediaCard(item: MediaItem, shape: Shape, backendUrl: String, onClick: () -> 
         }
         Text(
             item.title,
-            Modifier.padding(top = 6.dp),
+            // Clears the card's focus scale-up so the title isn't covered.
+            Modifier.padding(top = 14.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium,
