@@ -21,12 +21,18 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.homebase.tv.data.backend.MediaItem
 
 // Room for the focused card's scale-up so its border isn't clipped.
 private val CardPadding = PaddingValues(vertical = 12.dp, horizontal = 16.dp)
 
 @Composable
-fun HomeScreen(state: LauncherState, onLaunch: (String) -> Unit, firstItemFocus: FocusRequester) {
+fun HomeScreen(
+    state: LauncherState,
+    onLaunch: (String) -> Unit,
+    onOpenMedia: (MediaItem) -> Unit,
+    firstItemFocus: FocusRequester,
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
             Column {
@@ -64,8 +70,7 @@ fun HomeScreen(state: LauncherState, onLaunch: (String) -> Unit, firstItemFocus:
                     contentPadding = CardPadding,
                 ) {
                     items(row.items, key = { it.id }) { item ->
-                        // Phase 1C wires up play/resume and detail pages.
-                        MediaCard(item, row.shape, state.backendUrl, onClick = {})
+                        MediaCard(item, row.shape, state.backendUrl, onClick = { onOpenMedia(item) })
                     }
                 }
             }

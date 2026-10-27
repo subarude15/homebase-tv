@@ -16,6 +16,11 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
         </intent>
+        <package android:name="tv.emby.embyatv" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="embyatv" />
+        </intent>
     </queries>
 
     <application
