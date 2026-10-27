@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -24,6 +25,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -90,6 +92,7 @@ private fun Field(
     // Read-only until OK is pressed, so D-pad focus passing through doesn't pop the keyboard.
     var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val colors = MaterialTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
@@ -114,12 +117,20 @@ private fun Field(
                 }
                 .onPreviewKeyEvent { e ->
                     val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-                    if (!editing && ok && e.type == KeyEventType.KeyUp) {
-                        editing = true
-                        keyboard?.show()
-                        true
-                    } else {
-                        false
+                    when {
+                        // Single-line fields otherwise swallow Up/Down as cursor moves, trapping D-pad focus.
+                        e.key == Key.DirectionDown || e.key == Key.DirectionUp -> {
+                            if (e.type == KeyEventType.KeyDown) {
+                                focusManager.moveFocus(if (e.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                            }
+                            true
+                        }
+                        !editing && ok && e.type == KeyEventType.KeyUp -> {
+                            editing = true
+                            keyboard?.show()
+                            true
+                        }
+                        else -> false
                     }
                 }
                 .border(2.dp, if (focused) colors.primary else colors.border, RoundedCornerShape(8.dp))
