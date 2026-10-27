@@ -1,6 +1,7 @@
 package com.homebase.tv.data.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -16,6 +17,7 @@ data class Settings(
     val apiToken: String,
     val tvName: TvName,
     val favorites: List<String>,
+    val showFeatured: Boolean = true,
 )
 
 class SettingsRepository(context: Context) {
@@ -27,7 +29,12 @@ class SettingsRepository(context: Context) {
             apiToken = p[API_TOKEN].orEmpty(),
             tvName = TvName.entries.firstOrNull { it.name == p[TV_NAME] } ?: TvName.LivingRoom,
             favorites = p[FAVORITES]?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
+            showFeatured = p[SHOW_FEATURED] ?: true,
         )
+    }
+
+    suspend fun setShowFeatured(show: Boolean) {
+        store.edit { it[SHOW_FEATURED] = show }
     }
 
     suspend fun saveConnection(backendUrl: String, apiToken: String, tvName: TvName) {
@@ -51,6 +58,7 @@ class SettingsRepository(context: Context) {
         private val API_TOKEN = stringPreferencesKey("api_token")
         private val TV_NAME = stringPreferencesKey("tv_name")
         private val FAVORITES = stringPreferencesKey("favorites")
+        private val SHOW_FEATURED = booleanPreferencesKey("show_featured")
     }
 }
 

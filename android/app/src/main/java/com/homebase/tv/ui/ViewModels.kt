@@ -35,6 +35,7 @@ data class LauncherState(
     val backendUrl: String = "",
     val home: HomeResult = HomeResult(null, null),
     val homeLoading: Boolean = true,
+    val showFeatured: Boolean = true,
 ) {
     val favoriteApps: List<InstalledApp> get() = favoriteRow(apps, favorites) { it.packageName }
 }
@@ -49,7 +50,7 @@ class LauncherViewModel(
     private val homeLoading = MutableStateFlow(true)
 
     val state: StateFlow<LauncherState> = combine(apps, settingsRepo.settings, home, homeLoading) { a, s, h, loading ->
-        LauncherState(a == null, a.orEmpty(), s.favorites, s.backendUrl, h, loading)
+        LauncherState(a == null, a.orEmpty(), s.favorites, s.backendUrl, h, loading, s.showFeatured)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LauncherState())
 
     init {
@@ -64,11 +65,12 @@ class LauncherViewModel(
     }
 
     private suspend fun loadHome() {
+        val s = settingsRepo.settings.first()
+        backend.useToken(s.apiToken)
         if (home.value.home == null) {
             home.value = HomeResult(withContext(Dispatchers.IO) { backend.cachedHome() }, null)
         }
         homeLoading.value = true
-        val s = settingsRepo.settings.first()
         home.value = backend.home(s.backendUrl, s.apiToken)
         homeLoading.value = false
     }
@@ -101,6 +103,10 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val status = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Idle)
+
+    fun setShowFeatured(show: Boolean) {
+        viewModelScope.launch { settingsRepo.setShowFeatured(show) }
+    }
 
     fun saveAndTest(url: String, token: String, tvName: TvName) {
         viewModelScope.launch {

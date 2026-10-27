@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import Literal
 
 import httpx
@@ -13,6 +14,7 @@ FIELDS = ",".join([
     "ParentThumbItemId", "ParentThumbImageTag",
 ])
 TICKS_PER_MINUTE = 600_000_000
+EPISODE_PREFIX = re.compile(r"^.*?\bS\d{1,3}\s?E\d{1,4}\b\s*[-–:.]?\s*", re.IGNORECASE)
 
 
 class MediaItem(BaseModel):
@@ -20,6 +22,8 @@ class MediaItem(BaseModel):
     type: str
     title: str
     subtitle: str = ""
+    season: int | None = None
+    episode: int | None = None
     overview: str = ""
     year: int | None = None
     runtime_minutes: int | None = None
@@ -67,14 +71,20 @@ def _landscape(i: dict) -> str | None:
     return _backdrop(i) or _poster(i)
 
 
+def episode_name(name: str) -> str:
+    """Drops a filename-style "Show - S07E07 - " prefix that some Emby metadata keeps in episode names."""
+    return EPISODE_PREFIX.sub("", name).strip() or name
+
+
 def normalize(i: dict, shape: Shape) -> MediaItem:
     kind = i.get("Type", "")
     year = i.get("ProductionYear")
+    season = episode = None
     if kind == "Episode":
         title = i.get("SeriesName") or i.get("Name", "")
         season, episode = i.get("ParentIndexNumber"), i.get("IndexNumber")
-        number = f"S{season}:E{episode}" if season is not None and episode is not None else ""
-        subtitle = " · ".join(p for p in (number, i.get("Name", "")) if p)
+        number = f"S{season} E{episode}" if season is not None and episode is not None else ""
+        subtitle = " · ".join(p for p in (number, episode_name(i.get("Name", ""))) if p)
     elif kind == "Playlist":
         title = i.get("Name", "")
         subtitle = f"{i.get('ChildCount', 0)} items"
@@ -88,6 +98,8 @@ def normalize(i: dict, shape: Shape) -> MediaItem:
         type=kind,
         title=title,
         subtitle=subtitle,
+        season=season,
+        episode=episode,
         overview=i.get("Overview", ""),
         year=year,
         runtime_minutes=ticks // TICKS_PER_MINUTE if ticks else None,

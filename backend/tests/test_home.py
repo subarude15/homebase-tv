@@ -2,6 +2,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.integrations.emby import episode_name
 from app.main import create_app
 
 AUTH = {"Authorization": "Bearer secret"}
@@ -63,7 +64,8 @@ def test_home_rows_are_normalized_and_empty_rows_dropped(tmp_path):
 
     ep = rows["continue_watching"]["items"][0]
     assert ep["title"] == "Bake Off"
-    assert ep["subtitle"] == "S7:E7 · Dessert Week"
+    assert ep["subtitle"] == "S7 E7 · Dessert Week"
+    assert (ep["season"], ep["episode"]) == (7, 7)
     assert ep["progress"] == 0.38
     assert ep["runtime_minutes"] == 60
     assert ep["image"] == "/api/image/ep1/Primary?tag=abc"
@@ -73,6 +75,13 @@ def test_home_rows_are_normalized_and_empty_rows_dropped(tmp_path):
     assert rows["recent_movies"]["items"][0]["image"] == "/api/image/mv1/Primary?tag=p1"
     # Episodes without their own art fall back to the series poster.
     assert rows["recent_episodes"]["items"][0]["image"] == "/api/image/s2/Primary?tag=sp"
+
+
+def test_episode_name_drops_filename_prefix():
+    assert episode_name("The Great British Bake Off - S07E07 - Dessert Week") == "Dessert Week"
+    assert episode_name("Who Am I?") == "Who Am I?"
+    assert episode_name("raw.file.name") == "raw.file.name"
+    assert episode_name("Show S01E02") == "Show S01E02"
 
 
 def test_home_serves_stale_cache_when_emby_is_down(tmp_path):

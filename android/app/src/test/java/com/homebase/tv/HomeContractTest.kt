@@ -3,6 +3,9 @@ package com.homebase.tv
 import com.homebase.tv.data.backend.HomeResponse
 import com.homebase.tv.data.backend.MediaItem
 import com.homebase.tv.data.backend.embyLink
+import com.homebase.tv.ui.cardDetail
+import com.homebase.tv.ui.durationText
+import com.homebase.tv.ui.featuredDetail
 import com.homebase.tv.data.backend.Shape
 import com.homebase.tv.data.backend.backendJson
 import org.junit.Assert.assertEquals
@@ -39,5 +42,22 @@ class HomeContractTest {
         assertEquals("emby://play/srv/42", embyLink("srv", item.copy(type = "Movie")))
         assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Series")))
         assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Playlist")))
+    }
+
+    @Test
+    fun cardAndFeaturedText() {
+        val ep = MediaItem(
+            id = "1", type = "Episode", title = "Bake Off", subtitle = "S7 E7 · Dessert Week",
+            season = 7, episode = 7, runtimeMinutes = 56, progress = 0.375f,
+        )
+        assertEquals("S7 E7 · 35m left", cardDetail(ep))
+        assertEquals("S7 E7 · Dessert Week · 56m · 35m left", featuredDetail(ep))
+        val movie = MediaItem(id = "2", type = "Movie", title = "Scary Movie", subtitle = "2026", runtimeMinutes = 95)
+        assertEquals("2026", cardDetail(movie))
+        assertEquals("1h 28m left", cardDetail(movie.copy(progress = 0.07f)))
+        assertEquals("2026 · 1h 35m", featuredDetail(movie))
+        val playlist = MediaItem(id = "3", type = "Playlist", title = "90s", subtitle = "2079 items", runtimeMinutes = 47301)
+        assertEquals("2079 items", featuredDetail(playlist))
+        assertEquals("2h", durationText(120))
     }
 }

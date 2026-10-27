@@ -10,14 +10,18 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.darkColorScheme
 
 val Accent = Color(0xFFF2A541)
+val Charcoal = Color(0xFF141517)
 
 @Composable
 fun HomebaseTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Accent,
-            background = Color(0xFF0E1621),
-            surface = Color(0xFF0E1621),
+            background = Charcoal,
+            surface = Charcoal,
+            surfaceVariant = Color(0xFF26282C),
+            onSurface = Color(0xFFE8EAED),
+            onSurfaceVariant = Color(0xFF9AA0A6),
         ),
     ) {
         Surface(Modifier.fillMaxSize(), shape = RectangleShape) { content() }

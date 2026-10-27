@@ -15,8 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.homebase.tv.data.apps.InstalledApp
@@ -29,11 +31,13 @@ fun AppCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     isFavorite: Boolean = false,
+    width: Dp = 196.dp,
 ) {
     Card(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.width(196.dp).aspectRatio(16f / 9f),
+        modifier = modifier.width(width).aspectRatio(16f / 9f),
+        scale = CardDefaults.scale(focusedScale = 1.08f),
     ) {
         Box(Modifier.fillMaxSize()) {
             if (app.isBanner) {

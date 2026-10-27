@@ -35,6 +35,8 @@ data class MediaItem(
     val type: String,
     val title: String,
     val subtitle: String = "",
+    val season: Int? = null,
+    val episode: Int? = null,
     val overview: String = "",
     val year: Int? = null,
     @SerialName("runtime_minutes") val runtimeMinutes: Int? = null,
@@ -54,11 +56,15 @@ data class HomeResponse(
     @SerialName("server_id") val serverId: String? = null,
 )
 
-private val playableTypes = setOf("Movie", "Episode", "Video", "MusicVideo")
+val MediaItem.isPlayable get() = type in setOf("Movie", "Episode", "Video", "MusicVideo")
 
 /** Plays (resuming if in progress) what Emby can start directly; everything else opens its detail page. */
 fun embyLink(serverId: String, item: MediaItem): String =
-    "emby://${if (item.type in playableTypes) "play" else "items"}/$serverId/${item.id}"
+    "emby://${if (item.isPlayable) "play" else "items"}/$serverId/${item.id}"
+
+/** Image paths from the backend are relative; [width] asks the proxy for a larger rendition. */
+fun imageUrl(backendUrl: String, path: String, width: Int? = null): String =
+    backendUrl.trim().trimEnd('/') + path + (width?.let { "&width=$it" } ?: "")
 
 /** [error] is set when the backend couldn't be reached; [home] may then be the last saved copy. */
 data class HomeResult(val home: HomeResponse?, val error: String?)
@@ -96,8 +102,13 @@ class BackendRepository(cacheDir: File) {
         api(baseUrl).health(bearer(apiToken))
     }
 
-    suspend fun home(baseUrl: String, apiToken: String): HomeResult = withContext(Dispatchers.IO) {
+    /** Must be set before saved rows are shown, or their artwork requests go out unauthenticated. */
+    fun useToken(apiToken: String) {
         token = apiToken.trim()
+    }
+
+    suspend fun home(baseUrl: String, apiToken: String): HomeResult = withContext(Dispatchers.IO) {
+        useToken(apiToken)
         runCatching { api(baseUrl).home(bearer(apiToken)) }.fold(
             onSuccess = {
                 homeCache.writeText(backendJson.encodeToString(HomeResponse.serializer(), it))
