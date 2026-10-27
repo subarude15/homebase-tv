@@ -7,20 +7,30 @@ import com.homebase.tv.data.apps.InstalledAppsRepository
 import com.homebase.tv.data.apps.favoriteRow
 import com.homebase.tv.data.backend.BackendRepository
 import com.homebase.tv.data.backend.Health
+import com.homebase.tv.data.backend.HomeResult
 import com.homebase.tv.data.settings.Settings
 import com.homebase.tv.data.settings.SettingsRepository
 import com.homebase.tv.data.settings.TvName
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class LauncherState(
     val loading: Boolean = true,
     val apps: List<InstalledApp> = emptyList(),
     val favorites: List<String> = emptyList(),
+    val backendUrl: String = "",
+    val home: HomeResult = HomeResult(null, null),
+    val homeLoading: Boolean = true,
 ) {
     val favoriteApps: List<InstalledApp> get() = favoriteRow(apps, favorites) { it.packageName }
 }
@@ -28,15 +38,35 @@ data class LauncherState(
 class LauncherViewModel(
     private val appsRepo: InstalledAppsRepository,
     private val settingsRepo: SettingsRepository,
+    private val backend: BackendRepository,
 ) : ViewModel() {
     private val apps = MutableStateFlow<List<InstalledApp>?>(null)
+    private val home = MutableStateFlow(HomeResult(null, null))
+    private val homeLoading = MutableStateFlow(true)
 
-    val state: StateFlow<LauncherState> = combine(apps, settingsRepo.settings) { a, s ->
-        LauncherState(loading = a == null, apps = a.orEmpty(), favorites = s.favorites)
+    val state: StateFlow<LauncherState> = combine(apps, settingsRepo.settings, home, homeLoading) { a, s, h, loading ->
+        LauncherState(a == null, a.orEmpty(), s.favorites, s.backendUrl, h, loading)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LauncherState())
+
+    init {
+        viewModelScope.launch {
+            settingsRepo.settings.map { it.backendUrl to it.apiToken }.distinctUntilChanged().collectLatest { loadHome() }
+        }
+    }
 
     fun refresh() {
         viewModelScope.launch { apps.value = appsRepo.load() }
+        viewModelScope.launch { loadHome() }
+    }
+
+    private suspend fun loadHome() {
+        if (home.value.home == null) {
+            home.value = HomeResult(withContext(Dispatchers.IO) { backend.cachedHome() }, null)
+        }
+        homeLoading.value = true
+        val s = settingsRepo.settings.first()
+        home.value = backend.home(s.backendUrl, s.apiToken)
+        homeLoading.value = false
     }
 
     fun launch(packageName: String) = appsRepo.launch(packageName)

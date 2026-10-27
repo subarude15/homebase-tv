@@ -9,7 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -49,13 +50,37 @@ fun HomeScreen(state: LauncherState, onLaunch: (String) -> Unit, firstItemFocus:
                 }
             }
         }
-        item {
-            Text(
-                "Continue Watching, playlists and Recently Added arrive with the Emby integration.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        homeStatus(state)?.let { status ->
+            item {
+                Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        items(state.home.home?.rows.orEmpty(), key = { it.id }) { row ->
+            Column {
+                Text(row.title, style = MaterialTheme.typography.titleMedium)
+                LazyRow(
+                    Modifier.focusRestorer(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = CardPadding,
+                ) {
+                    items(row.items, key = { it.id }) { item ->
+                        // Phase 1C wires up play/resume and detail pages.
+                        MediaCard(item, row.shape, state.backendUrl, onClick = {})
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun homeStatus(state: LauncherState): String? {
+    val (home, error) = state.home
+    return when {
+        home == null && state.homeLoading -> "Loading your Emby library…"
+        home == null && error != null -> "Can't reach the Homebase server: $error"
+        error != null -> "Can't reach the Homebase server — showing saved content"
+        home?.stale == true -> "Emby is unreachable — showing saved content"
+        else -> null
     }
 }
 
@@ -74,7 +99,7 @@ fun AppsScreen(state: LauncherState, onLaunch: (String) -> Unit, onToggleFavorit
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = CardPadding,
         ) {
-            items(state.apps, key = { it.packageName }) { app ->
+            gridItems(state.apps, key = { it.packageName }) { app ->
                 AppCard(
                     app = app,
                     onClick = { onLaunch(app.packageName) },

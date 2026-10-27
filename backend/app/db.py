@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from pathlib import Path
 
 SCHEMA = """
@@ -7,6 +8,11 @@ CREATE TABLE IF NOT EXISTS preferences (
     key TEXT NOT NULL,
     value TEXT NOT NULL,
     PRIMARY KEY (device, key)
+);
+CREATE TABLE IF NOT EXISTS cache (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated REAL NOT NULL
 );
 """
 
@@ -23,3 +29,12 @@ def is_healthy(conn: sqlite3.Connection) -> bool:
         return conn.execute("SELECT 1").fetchone() == (1,)
     except sqlite3.Error:
         return False
+
+
+def cache_get(conn: sqlite3.Connection, key: str) -> tuple[str, float] | None:
+    return conn.execute("SELECT value, updated FROM cache WHERE key = ?", (key,)).fetchone()
+
+
+def cache_put(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT OR REPLACE INTO cache (key, value, updated) VALUES (?, ?, ?)", (key, value, time.time()))
+    conn.commit()

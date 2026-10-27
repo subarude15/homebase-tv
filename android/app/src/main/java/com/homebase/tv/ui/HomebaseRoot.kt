@@ -35,7 +35,7 @@ enum class Destination(val title: String) {
 
 @Composable
 fun HomebaseRoot(container: AppContainer) {
-    val launcher: LauncherViewModel = viewModel { LauncherViewModel(container.apps, container.settings) }
+    val launcher: LauncherViewModel = viewModel { LauncherViewModel(container.apps, container.settings, container.backend) }
     val settingsVm: SettingsViewModel = viewModel { SettingsViewModel(container.settings, container.backend) }
     val state by launcher.state.collectAsStateWithLifecycle()
 

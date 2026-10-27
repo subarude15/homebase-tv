@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     emby_url: str = ""
     emby_api_key: str = ""
+    emby_user: str = ""
+    home_cache_seconds: int = 60
 
     @property
     def db_path(self) -> Path:
