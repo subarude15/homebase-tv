@@ -7,4 +7,5 @@ services:
     ports:
       - "${HOMEBASE_PORT:-8770}:8770"
     volumes:
+      # Synology Container Manager won't create this; run `mkdir -p data` before the first `up`.
       - ./data:/data
