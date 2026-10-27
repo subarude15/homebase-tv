@@ -1,6 +1,8 @@
 package com.homebase.tv
 
 import com.homebase.tv.data.backend.HomeResponse
+import com.homebase.tv.data.backend.MediaItem
+import com.homebase.tv.data.backend.embyLink
 import com.homebase.tv.data.backend.Shape
 import com.homebase.tv.data.backend.backendJson
 import org.junit.Assert.assertEquals
@@ -27,5 +29,15 @@ class HomeContractTest {
         assertEquals(0.38f, item.progress!!, 0.001f)
         assertNull(item.year)
         assertEquals(true, home.stale)
+        assertNull(home.serverId)
+    }
+
+    @Test
+    fun embyLinkPlaysVideosAndOpensEverythingElse() {
+        val item = MediaItem(id = "42", type = "Episode", title = "")
+        assertEquals("emby://play/srv/42", embyLink("srv", item))
+        assertEquals("emby://play/srv/42", embyLink("srv", item.copy(type = "Movie")))
+        assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Series")))
+        assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Playlist")))
     }
 }

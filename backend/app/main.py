@@ -76,11 +76,12 @@ def create_app(settings: Settings | None = None, emby_transport: httpx.AsyncBase
             return {**json.loads(cached[0]), "stale": False}
         try:
             rows = await emby.home_rows()
+            server_id = await emby.server_id()
         except (httpx.HTTPError, LookupError) as e:
             if cached:
                 return {**json.loads(cached[0]), "stale": True}
             raise HTTPException(status_code=502, detail=f"Emby unavailable: {e}") from e
-        payload = {"rows": [r.model_dump() for r in rows], "updated_at": int(time.time())}
+        payload = {"server_id": server_id, "rows": [r.model_dump() for r in rows], "updated_at": int(time.time())}
         db.cache_put(conn, HOME_CACHE_KEY, json.dumps(payload))
         return {**payload, "stale": False}
 

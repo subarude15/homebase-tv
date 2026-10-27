@@ -107,6 +107,7 @@ class EmbyClient:
         )
         self.user_name = user_name
         self._user_id: str | None = None
+        self._server_id: str | None = None
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -124,6 +125,11 @@ class EmbyClient:
                 raise LookupError(f"Emby user {self.user_name!r} not found")
             self._user_id = match[0]["Id"]
         return self._user_id
+
+    async def server_id(self) -> str:
+        if self._server_id is None:
+            self._server_id = (await self._get("/System/Info/Public"))["Id"]
+        return self._server_id
 
     async def home_rows(self) -> list[Row]:
         uid = await self.user_id()

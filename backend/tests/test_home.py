@@ -23,6 +23,8 @@ def emby_handler(state: dict):
         if state.get("down"):
             raise httpx.ConnectError("emby down")
         path = request.url.path
+        if path == "/emby/System/Info/Public":
+            return httpx.Response(200, json={"Id": "srv1"})
         if path == "/emby/Users":
             return httpx.Response(200, json=[{"Id": "u1", "Name": "banditoburrito"}])
         if path.endswith("/Items/Resume"):
@@ -57,6 +59,7 @@ def test_home_rows_are_normalized_and_empty_rows_dropped(tmp_path):
     rows = {r["id"]: r for r in body["rows"]}
     assert list(rows) == ["continue_watching", "playlists", "recent_movies", "recent_episodes"]
     assert body["stale"] is False
+    assert body["server_id"] == "srv1"
 
     ep = rows["continue_watching"]["items"][0]
     assert ep["title"] == "Bake Off"

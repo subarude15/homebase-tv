@@ -8,6 +8,8 @@ import com.homebase.tv.data.apps.favoriteRow
 import com.homebase.tv.data.backend.BackendRepository
 import com.homebase.tv.data.backend.Health
 import com.homebase.tv.data.backend.HomeResult
+import com.homebase.tv.data.backend.MediaItem
+import com.homebase.tv.data.backend.embyLink
 import com.homebase.tv.data.settings.Settings
 import com.homebase.tv.data.settings.SettingsRepository
 import com.homebase.tv.data.settings.TvName
@@ -23,6 +25,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val EMBY_PACKAGE = "com.mb.android"
 
 data class LauncherState(
     val loading: Boolean = true,
@@ -70,6 +74,12 @@ class LauncherViewModel(
     }
 
     fun launch(packageName: String) = appsRepo.launch(packageName)
+
+    /** Falls back to opening Emby when the backend hasn't sent a server ID (older backend or cache). */
+    fun open(item: MediaItem) {
+        val serverId = home.value.home?.serverId
+        if (serverId == null || !appsRepo.openLink(embyLink(serverId, item), EMBY_PACKAGE)) appsRepo.launch(EMBY_PACKAGE)
+    }
 
     fun toggleFavorite(packageName: String) {
         viewModelScope.launch { settingsRepo.toggleFavorite(packageName) }

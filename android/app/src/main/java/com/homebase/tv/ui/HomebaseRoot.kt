@@ -82,7 +82,7 @@ fun HomebaseRoot(container: AppContainer) {
                 .focusGroup(),
         ) {
             when (destination) {
-                Destination.Home -> HomeScreen(state, launcher::launch, firstAppFocus)
+                Destination.Home -> HomeScreen(state, launcher::launch, launcher::open, firstAppFocus)
                 Destination.Movies, Destination.Shows, Destination.LiveTv, Destination.Sports -> ComingSoon(destination.title)
                 Destination.Apps -> AppsScreen(state, launcher::launch, launcher::toggleFavorite)
                 Destination.Settings -> SettingsScreen(settingsVm)
