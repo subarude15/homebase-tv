@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     emby_url: str = ""
     emby_api_key: str = ""
     emby_user: str = ""
+    trakt_client_id: str = ""
     home_cache_seconds: int = 60
 
     @property

@@ -1,5 +1,7 @@
 package com.homebase.tv.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homebase.tv.data.apps.InstalledApp
@@ -9,7 +11,12 @@ import com.homebase.tv.data.backend.BackendRepository
 import com.homebase.tv.data.backend.Health
 import com.homebase.tv.data.backend.HomeResult
 import com.homebase.tv.data.backend.MediaItem
+import com.homebase.tv.data.backend.NUVIO_PACKAGE
 import com.homebase.tv.data.backend.embyLink
+import com.homebase.tv.data.backend.isPlayable
+import com.homebase.tv.data.backend.nuvioLink
+import com.homebase.tv.data.backend.nuvioType
+import com.homebase.tv.data.backend.nuvioVideoId
 import com.homebase.tv.data.settings.Settings
 import com.homebase.tv.data.settings.SettingsRepository
 import com.homebase.tv.data.settings.TvName
@@ -27,6 +34,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val EMBY_PACKAGE = "com.mb.android"
+
+/**
+ * In-progress items resume through the extras Nuvio's own Google TV cards send, which start playback per
+ * Nuvio's auto-play setting; everything else opens its detail page.
+ */
+private fun nuvioIntent(item: MediaItem): Intent =
+    if (item.progress != null && item.isPlayable) {
+        Intent(Intent.ACTION_VIEW)
+            .setClassName(NUVIO_PACKAGE, "$NUVIO_PACKAGE.MainActivity")
+            .putExtra("launchMode", "stream")
+            .putExtra("contentId", item.contentId)
+            .putExtra("contentType", item.nuvioType)
+            .putExtra("videoId", nuvioVideoId(item))
+            .putExtra("name", item.title)
+            .apply {
+                item.season?.let { putExtra("season", it) }
+                item.episode?.let { putExtra("episode", it) }
+            }
+    } else {
+        Intent(Intent.ACTION_VIEW, Uri.parse(nuvioLink(item))).setPackage(NUVIO_PACKAGE)
+    }
 
 data class LauncherState(
     val loading: Boolean = true,
@@ -77,8 +105,12 @@ class LauncherViewModel(
 
     fun launch(packageName: String) = appsRepo.launch(packageName)
 
-    /** Falls back to opening Emby when the backend hasn't sent a server ID (older backend or cache). */
+    /** Falls back to opening the app itself when there's nothing to link to (e.g. Emby's server ID is missing). */
     fun open(item: MediaItem) {
+        if (item.source == "nuvio") {
+            if (item.contentId == null || !appsRepo.start(nuvioIntent(item))) appsRepo.launch(NUVIO_PACKAGE)
+            return
+        }
         val serverId = home.value.home?.serverId
         if (serverId == null || !appsRepo.openLink(embyLink(serverId, item), EMBY_PACKAGE)) appsRepo.launch(EMBY_PACKAGE)
     }

@@ -35,6 +35,16 @@ def cache_get(conn: sqlite3.Connection, key: str) -> tuple[str, float] | None:
     return conn.execute("SELECT value, updated FROM cache WHERE key = ?", (key,)).fetchone()
 
 
+def pref_get(conn: sqlite3.Connection, device: str, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM preferences WHERE device = ? AND key = ?", (device, key)).fetchone()
+    return row[0] if row else None
+
+
+def pref_put(conn: sqlite3.Connection, device: str, key: str, value: str) -> None:
+    conn.execute("INSERT OR REPLACE INTO preferences (device, key, value) VALUES (?, ?, ?)", (device, key, value))
+    conn.commit()
+
+
 def cache_put(conn: sqlite3.Connection, key: str, value: str) -> None:
     conn.execute("INSERT OR REPLACE INTO cache (key, value, updated) VALUES (?, ?, ?)", (key, value, time.time()))
     conn.commit()

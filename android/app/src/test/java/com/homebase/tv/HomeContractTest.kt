@@ -3,6 +3,8 @@ package com.homebase.tv
 import com.homebase.tv.data.backend.HomeResponse
 import com.homebase.tv.data.backend.MediaItem
 import com.homebase.tv.data.backend.embyLink
+import com.homebase.tv.data.backend.nuvioLink
+import com.homebase.tv.data.backend.nuvioVideoId
 import com.homebase.tv.ui.cardDetail
 import com.homebase.tv.ui.durationText
 import com.homebase.tv.ui.featuredDetail
@@ -42,6 +44,19 @@ class HomeContractTest {
         assertEquals("emby://play/srv/42", embyLink("srv", item.copy(type = "Movie")))
         assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Series")))
         assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Playlist")))
+    }
+
+    @Test
+    fun nuvioItemsParseAndLink() {
+        val json = """{"id":"trakt-8","type":"Episode","source":"nuvio","content_id":"tt100","title":"Below","season":1,"episode":2}"""
+        val ep = backendJson.decodeFromString(MediaItem.serializer(), json)
+        assertEquals("nuvio", ep.source)
+        assertEquals("nuvio://series/tt100", nuvioLink(ep))
+        assertEquals("tt100:1:2", nuvioVideoId(ep))
+        val movie = MediaItem(id = "m", type = "Movie", source = "nuvio", contentId = "tmdb:155", title = "")
+        assertEquals("nuvio://movie/tmdb:155", nuvioLink(movie))
+        assertEquals("tmdb:155", nuvioVideoId(movie))
+        assertEquals("emby", MediaItem(id = "e", type = "Movie", title = "").source)
     }
 
     @Test

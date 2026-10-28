@@ -33,6 +33,8 @@ enum class Shape {
 data class MediaItem(
     val id: String,
     val type: String,
+    val source: String = "emby",
+    @SerialName("content_id") val contentId: String? = null,
     val title: String,
     val subtitle: String = "",
     val season: Int? = null,
@@ -61,6 +63,17 @@ val MediaItem.isPlayable get() = type in setOf("Movie", "Episode", "Video", "Mus
 /** Plays (resuming if in progress) what Emby can start directly; everything else opens its detail page. */
 fun embyLink(serverId: String, item: MediaItem): String =
     "emby://${if (item.isPlayable) "play" else "items"}/$serverId/${item.id}"
+
+const val NUVIO_PACKAGE = "com.nuvio.tv"
+
+val MediaItem.nuvioType get() = if (type == "Movie") "movie" else "series"
+
+/** Nuvio's detail page; [MediaItem.contentId] is an IMDb ID or "tmdb:…", both of which Nuvio accepts here. */
+fun nuvioLink(item: MediaItem): String = "nuvio://${item.nuvioType}/${item.contentId}"
+
+/** Nuvio's ID for the exact video: the movie's own ID, or "show:season:episode". */
+fun nuvioVideoId(item: MediaItem): String =
+    if (item.season != null && item.episode != null) "${item.contentId}:${item.season}:${item.episode}" else item.contentId.orEmpty()
 
 /** Image paths from the backend are relative; [width] asks the proxy for a larger rendition. */
 fun imageUrl(backendUrl: String, path: String, width: Int? = null): String =

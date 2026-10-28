@@ -40,13 +40,13 @@ class InstalledAppsRepository(private val context: Context) {
         return runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
     }
 
-    /** Emby ignores deep links delivered to an already-open instance, so its task is restarted. */
-    fun openLink(uri: String, packageName: String): Boolean {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-            .setPackage(packageName)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        return runCatching { context.startActivity(intent) }.isSuccess
-    }
+    /** Emby and Nuvio ignore links delivered to an already-open instance, so the target's task is restarted. */
+    fun start(intent: Intent): Boolean = runCatching {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+    }.isSuccess
+
+    fun openLink(uri: String, packageName: String): Boolean =
+        start(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(packageName))
 }
 
 /** Favorites in saved order, skipping uninstalled ones; falls back to every app when none are set. */

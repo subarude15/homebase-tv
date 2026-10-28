@@ -241,10 +241,10 @@ private suspend fun restoreFocus(
 private fun homeStatus(state: LauncherState): String? {
     val (home, error) = state.home
     return when {
-        home == null && state.homeLoading -> "Loading your Emby library…"
+        home == null && state.homeLoading -> "Loading your library…"
         home == null && error != null -> "Can't reach the Homebase server: $error"
         error != null -> "Can't reach the Homebase server — showing saved content"
-        home?.stale == true -> "Emby is unreachable — showing saved content"
+        home?.stale == true -> "Emby or Trakt is unreachable — some rows may be out of date"
         else -> null
     }
 }
