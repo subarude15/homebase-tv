@@ -1,24 +1,25 @@
 package com.homebase.tv.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -31,12 +32,18 @@ import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import com.homebase.tv.AppContainer
-import com.homebase.tv.data.backend.MediaItem
-import kotlinx.coroutines.delay
+import com.homebase.tv.ui.theme.Charcoal
 
-enum class Destination(val title: String) {
-    Home("Home"), Movies("Movies"), Shows("Shows"), LiveTv("Live TV"), Sports("Sports"), Apps("Apps"), Settings("Settings")
+/** [rowIds] are the backend rows a media tab shows, in order. */
+enum class Destination(val title: String, val rowIds: List<String> = emptyList()) {
+    Home("Home", listOf("playlists", "continue_watching", "nuvio_continue", "favorite_channels")),
+    Movies("Movies", listOf("recent_movies")),
+    Shows("Shows", listOf("recent_episodes")),
+    Apps("Apps"),
+    Settings("Settings"),
 }
+
+private val Backdrop = Brush.linearGradient(listOf(Color(0xFF242A33), Charcoal), start = Offset.Zero, end = Offset(900f, 1400f))
 
 @Composable
 fun HomebaseRoot(container: AppContainer) {
@@ -55,16 +62,8 @@ fun HomebaseRoot(container: AppContainer) {
     var homeRestored by remember { mutableStateOf(false) }
     var focusMemory by rememberSaveable(stateSaver = FocusMemorySaver) { mutableStateOf<FocusMemory?>(null) }
     val tabFocus = remember { Destination.entries.associateWith { FocusRequester() } }
-
-    // Settles on the focused card briefly before swapping artwork, so scrolling a row doesn't churn backdrops.
-    var focusedMedia by remember { mutableStateOf<MediaItem?>(null) }
-    var featured by remember { mutableStateOf<MediaItem?>(null) }
-    LaunchedEffect(focusedMedia) {
-        delay(300)
-        featured = focusedMedia
-    }
-    val shownFeature = featured ?: state.home.home?.rows?.firstOrNull()?.items?.firstOrNull()
-    val showFeatured = destination == Destination.Home && state.showFeatured
+    val allRows = state.home.home?.rows.orEmpty()
+    val rows = remember(allRows, destination) { tabRows(allRows, destination.rowIds) }
 
     // Back: content -> current tab -> Home tab -> exit (system default).
     BackHandler(enabled = contentHasFocus || destination != Destination.Home) {
@@ -72,14 +71,7 @@ fun HomebaseRoot(container: AppContainer) {
         tabFocus.getValue(target).requestFocus()
     }
 
-    Box(Modifier.fillMaxSize()) {
-        if (showFeatured) {
-            FeaturedBackdrop(
-                shownFeature,
-                state.backendUrl,
-                Modifier.align(Alignment.TopEnd).fillMaxWidth(0.68f).fillMaxHeight(0.62f),
-            )
-        }
+    Box(Modifier.fillMaxSize().background(Backdrop)) {
         Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 20.dp)) {
             TabRow(
                 selectedTabIndex = destination.ordinal,
@@ -103,19 +95,19 @@ fun HomebaseRoot(container: AppContainer) {
                     .focusGroup(),
             ) {
                 when (destination) {
-                    Destination.Home -> HomeScreen(
+                    // key: each tab gets its own scroll and row state.
+                    Destination.Home, Destination.Movies, Destination.Shows -> key(destination) { MediaScreen(
                         state = state,
-                        featured = shownFeature,
+                        rows = rows,
+                        showApps = destination == Destination.Home,
                         focusMemory = focusMemory,
                         tabsHaveFocus = { tabsHaveFocus },
                         restoredOnce = { homeRestored },
                         onRestored = { homeRestored = true },
                         onFocusMemory = { focusMemory = it },
-                        onFeature = { focusedMedia = it },
                         onLaunch = launcher::launch,
                         onOpenMedia = launcher::open,
-                    )
-                    Destination.Movies, Destination.Shows, Destination.LiveTv, Destination.Sports -> ComingSoon(destination.title)
+                    ) }
                     Destination.Apps -> AppsScreen(state, launcher::launch, launcher::toggleFavorite)
                     Destination.Settings -> SettingsScreen(settingsVm)
                 }

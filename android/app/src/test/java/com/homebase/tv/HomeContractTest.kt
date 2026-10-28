@@ -7,7 +7,9 @@ import com.homebase.tv.data.backend.nuvioLink
 import com.homebase.tv.data.backend.nuvioVideoId
 import com.homebase.tv.ui.cardDetail
 import com.homebase.tv.ui.durationText
-import com.homebase.tv.ui.featuredDetail
+import com.homebase.tv.data.backend.MediaRow
+import com.homebase.tv.ui.Destination
+import com.homebase.tv.ui.tabRows
 import com.homebase.tv.data.backend.Shape
 import com.homebase.tv.data.backend.backendJson
 import org.junit.Assert.assertEquals
@@ -69,19 +71,30 @@ class HomeContractTest {
     }
 
     @Test
-    fun cardAndFeaturedText() {
+    fun cardText() {
         val ep = MediaItem(
             id = "1", type = "Episode", title = "Bake Off", subtitle = "S7 E7 · Dessert Week",
             season = 7, episode = 7, runtimeMinutes = 56, progress = 0.375f,
         )
         assertEquals("S7 E7 · 35m left", cardDetail(ep))
-        assertEquals("S7 E7 · Dessert Week · 56m · 35m left", featuredDetail(ep))
         val movie = MediaItem(id = "2", type = "Movie", title = "Scary Movie", subtitle = "2026", runtimeMinutes = 95)
         assertEquals("2026", cardDetail(movie))
         assertEquals("1h 28m left", cardDetail(movie.copy(progress = 0.07f)))
-        assertEquals("2026 · 1h 35m", featuredDetail(movie))
-        val playlist = MediaItem(id = "3", type = "Playlist", title = "90s", subtitle = "2079 items", runtimeMinutes = 47301)
-        assertEquals("2079 items", featuredDetail(playlist))
         assertEquals("2h", durationText(120))
+    }
+
+    @Test
+    fun tabsPickTheirRowsInTheirOwnOrder() {
+        fun row(id: String, empty: Boolean = false) =
+            MediaRow(id, id, Shape.Landscape, if (empty) emptyList() else listOf(MediaItem(id = "$id-1", type = "Movie", title = "")))
+        // Backend order, plus rows no tab shows and an empty one.
+        val rows = listOf(
+            row("continue_watching"), row("favorite_channels"), row("nuvio_continue", empty = true), row("trakt_watchlist"),
+            row("playlists"), row("recent_movies"), row("recent_episodes"), row("favorites"),
+        )
+        assertEquals(listOf("playlists", "continue_watching", "favorite_channels"), tabRows(rows, Destination.Home.rowIds).map { it.id })
+        assertEquals(listOf("recent_movies"), tabRows(rows, Destination.Movies.rowIds).map { it.id })
+        assertEquals(listOf("recent_episodes"), tabRows(rows, Destination.Shows.rowIds).map { it.id })
+        assertEquals(emptyList<MediaRow>(), tabRows(rows, Destination.Apps.rowIds))
     }
 }

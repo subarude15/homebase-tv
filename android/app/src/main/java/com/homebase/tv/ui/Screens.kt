@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,7 +30,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -44,11 +42,18 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.homebase.tv.data.backend.MediaItem
+import com.homebase.tv.data.backend.MediaRow
 
 // Room for the focused card's scale-up so its border isn't clipped.
 private val CardPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
 
 const val APPS_ROW = "apps"
+
+/** The rows a tab shows, in the tab's order whatever order the backend sends; missing or empty rows are skipped. */
+fun tabRows(rows: List<MediaRow>, ids: List<String>): List<MediaRow> {
+    val byId = rows.associateBy { it.id }
+    return ids.mapNotNull { id -> byId[id]?.takeIf { it.items.isNotEmpty() } }
+}
 
 /** The last focused card, so Home can put focus back after Emby (even if Android recreated the activity). */
 data class FocusMemory(val rowId: String, val key: String, val index: Int)
@@ -60,22 +65,21 @@ val FocusMemorySaver = Saver<FocusMemory?, String>(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(
+fun MediaScreen(
     state: LauncherState,
-    featured: MediaItem?,
+    rows: List<MediaRow>,
+    showApps: Boolean,
     focusMemory: FocusMemory?,
     tabsHaveFocus: () -> Boolean,
     restoredOnce: () -> Boolean,
     onRestored: () -> Unit,
     onFocusMemory: (FocusMemory) -> Unit,
-    onFeature: (MediaItem) -> Unit,
     onLaunch: (String) -> Unit,
     onOpenMedia: (MediaItem) -> Unit,
 ) {
-    val rows = state.home.home?.rows.orEmpty()
     val apps = state.favoriteApps
     val status = homeStatus(state)
-    val firstRowIndex = if (status != null) 2 else 1
+    val firstRowIndex = (if (showApps) 1 else 0) + (if (status != null) 1 else 0)
     val listState = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val requesters = remember { mutableMapOf<String, CardHandle>() }
@@ -93,6 +97,7 @@ fun HomeScreen(
     LaunchedEffect(resumes, rows, apps, windowFocused) {
         if (!windowFocused) return@LaunchedEffect
         val m = memory ?: FocusMemory(APPS_ROW, apps.firstOrNull()?.packageName ?: return@LaunchedEffect, 0)
+        if (m.rowId == APPS_ROW && !showApps) return@LaunchedEffect
         // A new activity hands initial focus to the tabs, so its first restore ignores where focus is.
         if (restoredOnce() && tabsHaveFocus()) return@LaunchedEffect
         val (lazyIndex, keys) = if (m.rowId == APPS_ROW) {
@@ -112,58 +117,51 @@ fun HomeScreen(
     val rowScrolling = LocalBringIntoViewSpec.current
     val lead = with(LocalDensity.current) { 40.dp.toPx() }
     val columnScrolling = remember(lead) { pinToTop(lead) }
-    Column(Modifier.fillMaxSize()) {
-        if (state.showFeatured && featured != null) FeaturedInfo(featured)
-        CompositionLocalProvider(LocalBringIntoViewSpec provides columnScrolling) {
-            LazyColumn(
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 24.dp),
-            ) {
-                item(key = APPS_ROW) {
-                    when {
-                        state.loading -> Text("Loading apps…")
-                        state.apps.isEmpty() -> Text("No TV apps found")
-                        else -> CardRow(rowStates.getOrPut(APPS_ROW) { LazyListState() }, rowScrolling) {
-                            itemsIndexed(apps, key = { _, app -> app.packageName }) { i, app ->
-                                AppCard(
-                                    app = app,
-                                    onClick = { onLaunch(app.packageName) },
-                                    width = 132.dp,
-                                    modifier = Modifier
-                                        .remembered(requesters, "$APPS_ROW/${app.packageName}")
-                                        .onFocusChanged { if (it.hasFocus) onFocusMemory(FocusMemory(APPS_ROW, app.packageName, i)) },
-                                )
-                            }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides columnScrolling) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            if (showApps) item(key = APPS_ROW) {
+                when {
+                    state.loading -> Text("Loading apps…")
+                    state.apps.isEmpty() -> Text("No TV apps found")
+                    else -> CardRow(rowStates.getOrPut(APPS_ROW) { LazyListState() }, rowScrolling) {
+                        itemsIndexed(apps, key = { _, app -> app.packageName }) { i, app ->
+                            AppCard(
+                                app = app,
+                                onClick = { onLaunch(app.packageName) },
+                                width = 132.dp,
+                                modifier = Modifier
+                                    .remembered(requesters, "$APPS_ROW/${app.packageName}")
+                                    .onFocusChanged { if (it.hasFocus) onFocusMemory(FocusMemory(APPS_ROW, app.packageName, i)) },
+                            )
                         }
                     }
                 }
-                status?.let {
-                    item(key = "status") {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            }
+            status?.let {
+                item(key = "status") {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                rows.forEach { row ->
-                    item(key = row.id) {
-                        Column {
-                            Text(row.title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
-                            CardRow(rowStates.getOrPut(row.id) { LazyListState() }, rowScrolling) {
-                                itemsIndexed(row.items, key = { _, item -> item.id }) { i, item ->
-                                    MediaCard(
-                                        item,
-                                        row.shape,
-                                        state.backendUrl,
-                                        onClick = { onOpenMedia(item) },
-                                        modifier = Modifier
-                                            .remembered(requesters, "${row.id}/${item.id}")
-                                            .onFocusChanged {
-                                                if (it.hasFocus) {
-                                                    onFocusMemory(FocusMemory(row.id, item.id, i))
-                                                    onFeature(item)
-                                                }
-                                            },
-                                    )
-                                }
+            }
+            rows.forEach { row ->
+                item(key = row.id) {
+                    Column {
+                        Text(row.title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
+                        CardRow(rowStates.getOrPut(row.id) { LazyListState() }, rowScrolling) {
+                            itemsIndexed(row.items, key = { _, item -> item.id }) { i, item ->
+                                MediaCard(
+                                    item,
+                                    row.shape,
+                                    state.backendUrl,
+                                    onClick = { onOpenMedia(item) },
+                                    modifier = Modifier
+                                        .remembered(requesters, "${row.id}/${item.id}")
+                                        .onFocusChanged { if (it.hasFocus) onFocusMemory(FocusMemory(row.id, item.id, i)) },
+                                )
                             }
                         }
                     }
@@ -273,12 +271,5 @@ fun AppsScreen(state: LauncherState, onLaunch: (String) -> Unit, onToggleFavorit
                 )
             }
         }
-    }
-}
-
-@Composable
-fun ComingSoon(title: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("$title is coming in a later phase", style = MaterialTheme.typography.titleMedium)
     }
 }

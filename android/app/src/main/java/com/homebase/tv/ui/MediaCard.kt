@@ -28,7 +28,6 @@ import coil3.compose.AsyncImage
 import com.homebase.tv.data.backend.MediaItem
 import com.homebase.tv.data.backend.Shape
 import com.homebase.tv.data.backend.imageUrl
-import com.homebase.tv.data.backend.isPlayable
 import com.homebase.tv.ui.theme.Accent
 import kotlin.math.roundToInt
 
@@ -114,9 +113,3 @@ private fun episodeCode(item: MediaItem): String? =
 fun cardDetail(item: MediaItem): String =
     if (item.progress == null) item.subtitle
     else listOfNotNull(episodeCode(item), remainingText(item)).joinToString(" · ").ifBlank { item.subtitle }
-
-fun featuredDetail(item: MediaItem): String = listOfNotNull(
-    item.subtitle.ifBlank { null },
-    item.runtimeMinutes?.takeIf { item.isPlayable && it > 0 }?.let(::durationText),
-    remainingText(item),
-).joinToString(" · ")

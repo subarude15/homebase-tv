@@ -64,11 +64,6 @@ fun SettingsScreen(vm: SettingsViewModel) {
         }
         Button(onClick = { vm.saveAndTest(url, token, tvName) }) { Text("Save & test connection") }
         Text(statusText(status))
-        Text("Featured banner on Home", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FilterChip(selected = s.showFeatured, onClick = { vm.setShowFeatured(true) }) { Text("On") }
-            FilterChip(selected = !s.showFeatured, onClick = { vm.setShowFeatured(false) }) { Text("Off") }
-        }
     }
 }
 
