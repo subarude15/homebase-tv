@@ -89,12 +89,16 @@ class HomeContractTest {
             MediaRow(id, id, Shape.Landscape, if (empty) emptyList() else listOf(MediaItem(id = "$id-1", type = "Movie", title = "")))
         // Backend order, plus rows no tab shows and an empty one.
         val rows = listOf(
-            row("continue_watching"), row("favorite_channels"), row("nuvio_continue", empty = true), row("trakt_watchlist"),
-            row("playlists"), row("recent_movies"), row("recent_episodes"), row("favorites"),
+            row("continue_watching"), row("favorite_channels"), row("nuvio_continue", empty = true),
+            row("trakt_watchlist_movies"), row("trakt_watchlist_shows"), row("playlists"), row("recent_movies"),
+            row("recent_episodes"), row("favorite_movies"), row("favorite_shows", empty = true),
+            row("trending_movies"), row("trending_series"), row("some_future_row"),
         )
         assertEquals(listOf("playlists", "continue_watching", "favorite_channels"), tabRows(rows, Destination.Home.rowIds).map { it.id })
-        assertEquals(listOf("recent_movies"), tabRows(rows, Destination.Movies.rowIds).map { it.id })
-        assertEquals(listOf("recent_episodes"), tabRows(rows, Destination.Shows.rowIds).map { it.id })
+        assertEquals(listOf("recent_movies", "trending_movies", "trakt_watchlist_movies", "favorite_movies"),
+            tabRows(rows, Destination.Movies.rowIds).map { it.id })
+        assertEquals(listOf("recent_episodes", "trending_series", "trakt_watchlist_shows"),
+            tabRows(rows, Destination.Shows.rowIds).map { it.id })
         assertEquals(emptyList<MediaRow>(), tabRows(rows, Destination.Apps.rowIds))
     }
 }

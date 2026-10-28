@@ -154,14 +154,18 @@ class EmbyClient:
             self._get(items, IncludeItemTypes="Playlist", Recursive="true", SortBy="SortName", Fields=FIELDS),
             self._get(f"{items}/Latest", IncludeItemTypes="Movie", Limit=20, Fields=FIELDS),
             self._get(f"{items}/Latest", IncludeItemTypes="Episode", Limit=20, Fields=FIELDS),
-            self._get(items, Filters="IsFavorite", Recursive="true", IncludeItemTypes="Movie,Series,Episode", Limit=40, Fields=FIELDS),
+            self._get(items, Filters="IsFavorite", Recursive="true", IncludeItemTypes="Movie,Series,Episode", Limit=100, Fields=FIELDS),
         )
+        favorites = favorites["Items"]
         specs: list[tuple[str, str, Shape, list[dict]]] = [
             ("continue_watching", "Continue Watching", "landscape", resume["Items"]),
             ("playlists", "My Emby Playlists", "square", playlists["Items"]),
             ("recent_movies", "Recently Added Movies", "poster", movies),
-            ("recent_episodes", "Recently Added Episodes", "poster", episodes),
-            ("favorites", "Favorites", "poster", favorites["Items"]),
+            # Emby's Latest groups new episodes under their series.
+            ("recent_episodes", "Recently Added Shows", "poster", episodes),
+            ("favorite_movies", "Favorite Movies", "poster", [i for i in favorites if i.get("Type") == "Movie"]),
+            # Favorited episodes count as the show's, so they aren't lost.
+            ("favorite_shows", "Favorite Shows", "poster", [i for i in favorites if i.get("Type") != "Movie"]),
         ]
         rows = [Row(id=rid, title=title, shape=shape, items=[normalize(i, shape) for i in raw]) for rid, title, shape, raw in specs]
         return [r for r in rows if r.items]

@@ -37,8 +37,8 @@ import com.homebase.tv.ui.theme.Charcoal
 /** [rowIds] are the backend rows a media tab shows, in order. */
 enum class Destination(val title: String, val rowIds: List<String> = emptyList()) {
     Home("Home", listOf("playlists", "continue_watching", "nuvio_continue", "favorite_channels")),
-    Movies("Movies", listOf("recent_movies")),
-    Shows("Shows", listOf("recent_episodes")),
+    Movies("Movies", listOf("recent_movies", "trending_movies", "trakt_watchlist_movies", "favorite_movies")),
+    Shows("Shows", listOf("recent_episodes", "trending_series", "trakt_watchlist_shows", "favorite_shows")),
     Apps("Apps"),
     Settings("Settings"),
 }

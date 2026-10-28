@@ -127,8 +127,9 @@ class TraktClient:
     async def home_rows(self) -> list[Row]:
         playback, watchlist = await asyncio.gather(
             self._get("/sync/playback", extended="full", limit=20),
-            self._get("/sync/watchlist", extended="full", page=1, limit=40),
+            self._get("/sync/watchlist", extended="full", page=1, limit=100),
         )
+        watchlist = [i for w in watchlist if (i := watchlist_item(w))]
         # Nuvio only resumes Trakt progress from its Continue Watching window, so older items would restart at 0.
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - CONTINUE_WATCHING_DAYS * 86400))
         playback = [p for p in playback if (p.get("paused_at") or "") >= cutoff]
@@ -136,8 +137,10 @@ class TraktClient:
         rows = [
             Row(id="nuvio_continue", title="Continue Watching in Nuvio", shape="landscape",
                 items=[i for p in playback if (i := playback_item(p))]),
-            Row(id="trakt_watchlist", title="Watchlist", shape="poster",
-                items=[i for w in watchlist if (i := watchlist_item(w))]),
+            Row(id="trakt_watchlist_movies", title="My Watchlist", shape="poster",
+                items=[i for i in watchlist if i.type == "Movie"]),
+            Row(id="trakt_watchlist_shows", title="My Watchlist", shape="poster",
+                items=[i for i in watchlist if i.type == "Series"]),
         ]
         return [r for r in rows if r.items]
 

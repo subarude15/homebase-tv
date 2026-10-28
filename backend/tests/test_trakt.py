@@ -30,6 +30,7 @@ PLAYBACK = [
 WATCHLIST = [
     {"id": 3, "type": "show", "show": {"title": "Severance", "year": 2022, "ids": {"tmdb": 95396}}},
     {"id": 4, "type": "season", "season": {"number": 1}},
+    {"id": 5, "type": "movie", "movie": {"title": "Heat", "year": 1995, "ids": {"imdb": "tt0113277"}}},
 ]
 
 
@@ -74,7 +75,8 @@ def test_nuvio_rows_follow_emby_continue_watching(tmp_path):
     with make_client(tmp_path, {}, trakt) as c:
         body = c.get("/api/home", headers=AUTH).json()
     assert [r["id"] for r in body["rows"]] == [
-        "continue_watching", "nuvio_continue", "trakt_watchlist", "playlists", "recent_movies", "recent_episodes"]
+        "continue_watching", "nuvio_continue", "trakt_watchlist_movies", "trakt_watchlist_shows",
+        "playlists", "recent_movies", "recent_episodes"]
     assert trakt["bearer"] == "Bearer old" and "refreshed" not in trakt
 
     movie, episode = rows_of(body)["nuvio_continue"]["items"]
@@ -87,14 +89,16 @@ def test_nuvio_rows_follow_emby_continue_watching(tmp_path):
     assert episode["subtitle"] == "S1 E1 · Come Home Year"
     assert episode["image"] == episode["backdrop"] == f"/api/trakt/image?path={FANART}"
 
-    [show] = rows_of(body)["trakt_watchlist"]["items"]
+    [show] = rows_of(body)["trakt_watchlist_shows"]["items"]
     assert (show["type"], show["content_id"], show["progress"]) == ("Series", "tmdb:95396", None)
+    [film] = rows_of(body)["trakt_watchlist_movies"]["items"]
+    assert (film["type"], film["content_id"]) == ("Movie", "tt0113277")
 
 
 def test_each_source_fails_on_its_own(tmp_path):
     with make_client(tmp_path, {"down": True}, {}) as c:
         body = c.get("/api/home", headers=AUTH).json()
-    assert list(rows_of(body)) == ["nuvio_continue", "trakt_watchlist"]
+    assert list(rows_of(body)) == ["nuvio_continue", "trakt_watchlist_movies", "trakt_watchlist_shows"]
     assert body["stale"] is True and body["server_id"] is None
 
     with make_client(tmp_path / "b", {}, {"down": True}) as c:

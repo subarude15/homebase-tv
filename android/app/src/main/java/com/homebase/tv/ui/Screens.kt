@@ -242,7 +242,7 @@ private fun homeStatus(state: LauncherState): String? {
         home == null && state.homeLoading -> "Loading your library…"
         home == null && error != null -> "Can't reach the Homebase server: $error"
         error != null -> "Can't reach the Homebase server — showing saved content"
-        home?.stale == true -> "Emby or Trakt is unreachable — some rows may be out of date"
+        home?.stale == true -> "A media source is unreachable — some rows may be out of date"
         else -> null
     }
 }

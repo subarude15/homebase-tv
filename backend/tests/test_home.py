@@ -39,6 +39,8 @@ def emby_handler(state: dict):
         if path.endswith("/Items"):
             if request.url.params.get("IncludeItemTypes") == "Playlist":
                 return httpx.Response(200, json={"Items": [PLAYLIST]})
+            if request.url.params.get("Filters") == "IsFavorite":
+                return httpx.Response(200, json={"Items": state.get("favorites", [])})
             return httpx.Response(200, json={"Items": []})
         if "/Images/" in path:
             return httpx.Response(200, content=b"jpegbytes", headers={"content-type": "image/jpeg"})
@@ -78,6 +80,14 @@ def test_home_rows_are_normalized_and_empty_rows_dropped(tmp_path):
     assert rows["recent_movies"]["items"][0]["image"] == "/api/image/mv1/Primary?tag=p1"
     # Episodes without their own art fall back to the series poster.
     assert rows["recent_episodes"]["items"][0]["image"] == "/api/image/s2/Primary?tag=sp"
+
+
+def test_favorites_are_split_into_movies_and_shows(tmp_path):
+    series = {"Id": "se1", "Type": "Series", "Name": "Bluey", "ImageTags": {"Primary": "b"}}
+    with make_client(tmp_path, {"favorites": [MOVIE, series, UNMATCHED_EPISODE]}) as c:
+        rows = {r["id"]: r for r in c.get("/api/home", headers=AUTH).json()["rows"]}
+    assert [i["id"] for i in rows["favorite_movies"]["items"]] == ["mv1"]
+    assert [i["id"] for i in rows["favorite_shows"]["items"]] == ["se1", "ep2"]
 
 
 def test_episode_name_drops_filename_prefix():
