@@ -95,16 +95,33 @@ def create_app(
     async def ping():
         return {"pong": True}
 
+    refreshes: dict[str, asyncio.Task] = {}
+
+    async def refresh(conn, key: str, fetch: Callable[[], Awaitable[dict]]) -> dict:
+        payload = {**await fetch(), "updated_at": int(time.time())}
+        db.cache_put(conn, key, json.dumps(payload))
+        return payload
+
     async def source_rows(conn, key: str, fetch: Callable[[], Awaitable[dict]]) -> tuple[dict | None, bool, str]:
         """(payload, stale, error) for one source; a failing source falls back to its own last copy."""
         cached = db.cache_get(conn, key)
         if cached and time.time() - cached[1] < settings.home_cache_seconds:
             return json.loads(cached[0]), False, ""
+        task = refreshes.get(key)
+        started = task is None or task.done()
+        if started:
+            task = refreshes[key] = asyncio.create_task(refresh(conn, key, fetch))
+            # Marks a failure as handled when nobody is still waiting on it.
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+        # Only the request that started a refresh waits for it; the rest get the last copy straight away.
+        wait = (settings.home_refresh_wait_seconds if started else 0) if cached else None
         try:
-            payload = {**await fetch(), "updated_at": int(time.time())}
+            # shield: a slow refresh keeps running for the next request instead of being cancelled.
+            payload = await asyncio.wait_for(asyncio.shield(task), wait)
+        except TimeoutError:
+            return json.loads(cached[0]), False, ""
         except (httpx.HTTPError, LookupError) as e:
             return (json.loads(cached[0]) if cached else None), True, str(e)
-        db.cache_put(conn, key, json.dumps(payload))
         return payload, False, ""
 
     async def emby_payload() -> dict:

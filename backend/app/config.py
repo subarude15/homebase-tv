@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Favorite channel shortcuts in row order: comma-separated "streamID=Name".
     iptv_channels: str = ""
     home_cache_seconds: int = 60
+    # Past this, an expired source is served from its last copy while the refresh finishes in the background.
+    home_refresh_wait_seconds: float = 3
 
     @property
     def db_path(self) -> Path:

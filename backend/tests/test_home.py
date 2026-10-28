@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import httpx
 from fastapi.testclient import TestClient
 
@@ -92,6 +95,33 @@ def test_home_serves_stale_cache_when_emby_is_down(tmp_path):
         second = c.get("/api/home", headers=AUTH).json()
     assert second["stale"] is True
     assert second["rows"] == first["rows"]
+
+
+def test_slow_refresh_serves_last_copy_and_finishes_in_background(tmp_path):
+    state = {}
+    sync_handler = emby_handler(state)
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        if state.get("slow"):
+            await asyncio.sleep(1)
+            state["refreshed"] = True
+        return sync_handler(request)
+
+    settings = Settings(api_token="secret", data_dir=tmp_path, emby_url="http://emby:8096", emby_api_key="k",
+                        home_cache_seconds=0, home_refresh_wait_seconds=0.3)
+    with TestClient(create_app(settings, emby_transport=httpx.MockTransport(handle))) as c:
+        first = c.get("/api/home", headers=AUTH).json()
+        state["slow"] = True
+        start = time.monotonic()
+        second = c.get("/api/home", headers=AUTH).json()
+        assert 0.25 < time.monotonic() - start < 0.8
+        assert second["rows"] == first["rows"] and second["stale"] is False
+        # Another request during the same refresh doesn't wait again.
+        start = time.monotonic()
+        c.get("/api/home", headers=AUTH)
+        assert time.monotonic() - start < 0.2
+        time.sleep(1.5)
+        assert state.get("refreshed")
 
 
 def test_home_without_cache_when_emby_is_down_is_502(tmp_path):
