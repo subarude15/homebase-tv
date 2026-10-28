@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -58,6 +57,9 @@ fun tabRows(rows: List<MediaRow>, ids: List<String>): List<MediaRow> {
 /** The last focused card, so Home can put focus back after Emby (even if Android recreated the activity). */
 data class FocusMemory(val rowId: String, val key: String, val index: Int)
 
+/** Whether two memories name the same card; the index alone shifts when a row reorders. */
+fun sameCard(a: FocusMemory?, b: FocusMemory?): Boolean = a?.rowId == b?.rowId && a?.key == b?.key
+
 val FocusMemorySaver = Saver<FocusMemory?, String>(
     save = { it?.let { m -> "${m.rowId}\n${m.key}\n${m.index}" } },
     restore = { s -> s.split('\n').let { FocusMemory(it[0], it[1], it[2].toInt()) } },
@@ -69,7 +71,8 @@ fun MediaScreen(
     state: LauncherState,
     rows: List<MediaRow>,
     showApps: Boolean,
-    focusMemory: FocusMemory?,
+    // Read live: a restore must see a focus move made while it is still running.
+    focusMemory: () -> FocusMemory?,
     tabsHaveFocus: () -> Boolean,
     restoredOnce: () -> Boolean,
     onRestored: () -> Unit,
@@ -83,7 +86,8 @@ fun MediaScreen(
     val listState = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val requesters = remember { mutableMapOf<String, CardHandle>() }
-    val memory by rememberUpdatedState(focusMemory)
+    // App icons are rebuilt on every resume, so the restore keys on package names rather than the apps.
+    val appKeys = apps.map { it.packageName }
     var resumes by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumes++
@@ -94,14 +98,15 @@ fun MediaScreen(
     val windowFocused = LocalWindowInfo.current.isWindowFocused
 
     // Re-run on resume and whenever rows reload; a no-op when the remembered card already has focus.
-    LaunchedEffect(resumes, rows, apps, windowFocused) {
+    LaunchedEffect(resumes, rows, appKeys, windowFocused) {
         if (!windowFocused) return@LaunchedEffect
-        val m = memory ?: FocusMemory(APPS_ROW, apps.firstOrNull()?.packageName ?: return@LaunchedEffect, 0)
+        val start = focusMemory()
+        val m = start ?: FocusMemory(APPS_ROW, appKeys.firstOrNull() ?: return@LaunchedEffect, 0)
         if (m.rowId == APPS_ROW && !showApps) return@LaunchedEffect
         // A new activity hands initial focus to the tabs, so its first restore ignores where focus is.
         if (restoredOnce() && tabsHaveFocus()) return@LaunchedEffect
         val (lazyIndex, keys) = if (m.rowId == APPS_ROW) {
-            0 to apps.map { it.packageName }
+            0 to appKeys
         } else {
             val r = rows.indexOfFirst { it.id == m.rowId }.takeIf { it >= 0 } ?: return@LaunchedEffect
             firstRowIndex + r to rows[r].items.map { it.id }
@@ -109,7 +114,9 @@ fun MediaScreen(
         if (keys.isEmpty()) return@LaunchedEffect
         // The card may have left the row (e.g. an episode finished); fall back to the same position.
         val index = keys.indexOf(m.key).takeIf { it >= 0 } ?: m.index.coerceIn(0, keys.lastIndex)
-        if (restoreFocus(listState, lazyIndex, { rowStates[m.rowId] }, index) { requesters["${m.rowId}/${keys[index]}"] }) {
+        // Gives up as soon as the user moves to another card, or OK would land on the card it pulled focus back to.
+        val stillWanted = { sameCard(focusMemory(), start) }
+        if (restoreFocus(listState, lazyIndex, { rowStates[m.rowId] }, index, stillWanted) { requesters["${m.rowId}/${keys[index]}"] }) {
             onRestored()
         }
     }
@@ -217,11 +224,13 @@ private suspend fun restoreFocus(
     lazyIndex: Int,
     rowState: () -> LazyListState?,
     index: Int,
+    stillWanted: () -> Boolean,
     requester: () -> CardHandle?,
 ): Boolean {
     if (listState.layoutInfo.visibleItemsInfo.none { it.index == lazyIndex }) listState.scrollToItem(lazyIndex)
     repeat(10) {
         withFrameNanos {}
+        if (!stillWanted()) return false
         val row = rowState() ?: return@repeat
         if (row.layoutInfo.visibleItemsInfo.none { it.index == index }) {
             row.scrollToItem(index)

@@ -43,6 +43,10 @@ enum class Destination(val title: String, val rowIds: List<String> = emptyList()
     Settings("Settings"),
 }
 
+/** The tab Back moves focus to; on the Home tab it's Home itself, so Back never leaves Homebase. */
+fun backTarget(current: Destination, contentHasFocus: Boolean): Destination =
+    if (contentHasFocus) current else Destination.Home
+
 private val Backdrop = Brush.linearGradient(listOf(Color(0xFF242A33), Charcoal), start = Offset.Zero, end = Offset(900f, 1400f))
 
 @Composable
@@ -65,11 +69,9 @@ fun HomebaseRoot(container: AppContainer) {
     val allRows = state.home.home?.rows.orEmpty()
     val rows = remember(allRows, destination) { tabRows(allRows, destination.rowIds) }
 
-    // Back: content -> current tab -> Home tab -> exit (system default).
-    BackHandler(enabled = contentHasFocus || destination != Destination.Home) {
-        val target = if (contentHasFocus) destination else Destination.Home
-        tabFocus.getValue(target).requestFocus()
-    }
+    // Back: content -> current tab -> Home tab, and stops there like a launcher; letting the system finish
+    // the activity would resume whichever app is underneath. The Home button still leaves as usual.
+    BackHandler { tabFocus.getValue(backTarget(destination, contentHasFocus)).requestFocus() }
 
     Box(Modifier.fillMaxSize().background(Backdrop)) {
         Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 20.dp)) {
@@ -100,7 +102,7 @@ fun HomebaseRoot(container: AppContainer) {
                         state = state,
                         rows = rows,
                         showApps = destination == Destination.Home,
-                        focusMemory = focusMemory,
+                        focusMemory = { focusMemory },
                         tabsHaveFocus = { tabsHaveFocus },
                         restoredOnce = { homeRestored },
                         onRestored = { homeRestored = true },

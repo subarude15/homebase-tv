@@ -60,9 +60,9 @@ data class HomeResponse(
 
 val MediaItem.isPlayable get() = type in setOf("Movie", "Episode", "Video", "MusicVideo")
 
-/** Plays (resuming if in progress) what Emby can start directly; everything else opens its detail page. */
+/** Resumes a partly watched video, like Nuvio's links; everything else opens its detail page. */
 fun embyLink(serverId: String, item: MediaItem): String =
-    "emby://${if (item.isPlayable) "play" else "items"}/$serverId/${item.id}"
+    "emby://${if (item.isPlayable && item.progress != null) "play" else "items"}/$serverId/${item.id}"
 
 const val NUVIO_PACKAGE = "com.nuvio.tv"
 

@@ -8,7 +8,11 @@ import com.homebase.tv.data.backend.nuvioVideoId
 import com.homebase.tv.ui.cardDetail
 import com.homebase.tv.ui.durationText
 import com.homebase.tv.data.backend.MediaRow
+import com.homebase.tv.ui.APPS_ROW
 import com.homebase.tv.ui.Destination
+import com.homebase.tv.ui.FocusMemory
+import com.homebase.tv.ui.backTarget
+import com.homebase.tv.ui.sameCard
 import com.homebase.tv.ui.tabRows
 import com.homebase.tv.data.backend.Shape
 import com.homebase.tv.data.backend.backendJson
@@ -40,12 +44,30 @@ class HomeContractTest {
     }
 
     @Test
-    fun embyLinkPlaysVideosAndOpensEverythingElse() {
-        val item = MediaItem(id = "42", type = "Episode", title = "")
-        assertEquals("emby://play/srv/42", embyLink("srv", item))
-        assertEquals("emby://play/srv/42", embyLink("srv", item.copy(type = "Movie")))
-        assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Series")))
-        assertEquals("emby://items/srv/42", embyLink("srv", item.copy(type = "Playlist")))
+    fun embyLinkResumesInProgressVideosAndOpensEverythingElse() {
+        val resume = MediaItem(id = "42", type = "Episode", title = "", progress = 0.4f)
+        assertEquals("emby://play/srv/42", embyLink("srv", resume))
+        assertEquals("emby://play/srv/42", embyLink("srv", resume.copy(type = "Movie")))
+        // A favorite or newly added movie opens its page instead of starting playback.
+        assertEquals("emby://items/srv/42", embyLink("srv", resume.copy(type = "Movie", progress = null)))
+        assertEquals("emby://items/srv/42", embyLink("srv", resume.copy(progress = null)))
+        assertEquals("emby://items/srv/42", embyLink("srv", resume.copy(type = "Series")))
+        assertEquals("emby://items/srv/42", embyLink("srv", resume.copy(type = "Playlist", progress = null)))
+    }
+
+    @Test
+    fun backStopsAtTheHomeTab() {
+        assertEquals(Destination.Movies, backTarget(Destination.Movies, contentHasFocus = true))
+        for (d in Destination.entries) assertEquals(Destination.Home, backTarget(d, contentHasFocus = false))
+    }
+
+    @Test
+    fun focusRestoreYieldsOnceTheUserMovesToAnotherCard() {
+        val youtube = FocusMemory(APPS_ROW, "com.google.android.youtube.tv", 2)
+        assertEquals(true, sameCard(youtube, youtube.copy(index = 0)))
+        assertEquals(false, sameCard(youtube, FocusMemory(APPS_ROW, "com.nuvio.tv", 3)))
+        assertEquals(false, sameCard(null, youtube))
+        assertEquals(true, sameCard(null, null))
     }
 
     @Test
