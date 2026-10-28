@@ -116,7 +116,9 @@ class HomeContractTest {
             row("recent_episodes"), row("favorite_movies"), row("favorite_shows", empty = true),
             row("trending_movies"), row("trending_series"), row("some_future_row"),
         )
-        assertEquals(listOf("playlists", "continue_watching", "favorite_channels"), tabRows(rows, Destination.Home.rowIds).map { it.id })
+        // Favorite Channels stays out of Home; TiviMate is still reachable as a Favorite App.
+        assertEquals(listOf("playlists", "continue_watching", "nuvio_continue"), Destination.Home.rowIds)
+        assertEquals(listOf("playlists", "continue_watching"), tabRows(rows, Destination.Home.rowIds).map { it.id })
         assertEquals(listOf("recent_movies", "trending_movies", "trakt_watchlist_movies", "favorite_movies"),
             tabRows(rows, Destination.Movies.rowIds).map { it.id })
         assertEquals(listOf("recent_episodes", "trending_series", "trakt_watchlist_shows"),

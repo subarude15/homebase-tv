@@ -2,6 +2,7 @@ package com.homebase.tv.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -31,6 +33,7 @@ fun AppCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     isFavorite: Boolean = false,
+    moving: Boolean = false,
     width: Dp = 196.dp,
 ) {
     Card(
@@ -54,6 +57,17 @@ fun AppCard(
             }
             if (isFavorite) {
                 Text("★", Modifier.align(Alignment.TopEnd).padding(6.dp), color = Accent)
+            }
+            if (moving) {
+                Box(Modifier.matchParentSize().border(3.dp, Accent, MaterialTheme.shapes.medium))
+                Text(
+                    "◀  ▶",
+                    Modifier.align(Alignment.BottomCenter).padding(4.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)
+                        .padding(horizontal = 8.dp),
+                    color = Accent,
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
         }
     }

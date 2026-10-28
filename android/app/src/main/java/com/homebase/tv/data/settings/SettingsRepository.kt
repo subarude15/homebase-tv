@@ -26,7 +26,7 @@ class SettingsRepository(context: Context) {
             backendUrl = p[BACKEND_URL] ?: DEFAULT_BACKEND_URL,
             apiToken = p[API_TOKEN].orEmpty(),
             tvName = TvName.entries.firstOrNull { it.name == p[TV_NAME] } ?: TvName.LivingRoom,
-            favorites = p[FAVORITES]?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
+            favorites = favoritesOf(p[FAVORITES]),
         )
     }
 
@@ -39,10 +39,11 @@ class SettingsRepository(context: Context) {
     }
 
     suspend fun toggleFavorite(packageName: String) {
-        store.edit { p ->
-            val current = p[FAVORITES]?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
-            p[FAVORITES] = toggled(current, packageName).joinToString("\n")
-        }
+        store.edit { p -> p[FAVORITES] = toggled(favoritesOf(p[FAVORITES]), packageName).joinToString("\n") }
+    }
+
+    suspend fun reorderFavorites(shown: List<String>) {
+        store.edit { p -> p[FAVORITES] = reordered(favoritesOf(p[FAVORITES]), shown).joinToString("\n") }
     }
 
     companion object {
@@ -54,4 +55,18 @@ class SettingsRepository(context: Context) {
     }
 }
 
+/** The saved favorites, one package per line; a repeated package keeps its first place. */
+fun favoritesOf(saved: String?): List<String> = saved?.split('\n')?.filter { it.isNotBlank() }?.distinct().orEmpty()
+
 fun toggled(list: List<String>, item: String): List<String> = if (item in list) list - item else list + item
+
+/**
+ * Saves the order Home showed: [shown] fills the places the shown favorites hold, so an uninstalled
+ * favorite keeps its place for when it's reinstalled. With no installed favorites, Home shows every
+ * app, and reordering them makes them the favorites.
+ */
+fun reordered(saved: List<String>, shown: List<String>): List<String> {
+    if (!saved.containsAll(shown)) return saved - shown.toSet() + shown
+    val next = shown.iterator()
+    return saved.map { if (it in shown) next.next() else it }
+}

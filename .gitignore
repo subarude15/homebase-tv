@@ -2,6 +2,7 @@
 .env
 *.keystore
 *.jks
+*.p12
 local.properties
 
 # Python

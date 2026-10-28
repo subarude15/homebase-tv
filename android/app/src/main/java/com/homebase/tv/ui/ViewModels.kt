@@ -123,6 +123,10 @@ class LauncherViewModel(
     fun toggleFavorite(packageName: String) {
         viewModelScope.launch { settingsRepo.toggleFavorite(packageName) }
     }
+
+    fun reorderFavorites(shown: List<String>) {
+        viewModelScope.launch { settingsRepo.reorderFavorites(shown) }
+    }
 }
 
 sealed interface ConnectionStatus {

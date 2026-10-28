@@ -1,5 +1,6 @@
 package com.homebase.tv.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -25,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
@@ -34,6 +36,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
@@ -60,6 +68,58 @@ data class FocusMemory(val rowId: String, val key: String, val index: Int)
 /** Whether two memories name the same card; the index alone shifts when a row reorders. */
 fun sameCard(a: FocusMemory?, b: FocusMemory?): Boolean = a?.rowId == b?.rowId && a?.key == b?.key
 
+/** Where [m]'s card is in a row of [keys]; if it left the row (e.g. an episode finished), the same position. */
+fun restoreIndex(keys: List<String>, m: FocusMemory): Int = keys.indexOf(m.key).takeIf { it >= 0 } ?: m.index.coerceIn(0, keys.lastIndex)
+
+/** A remote key as Move Mode sees it; [repeat] counts the key-repeats Android sends while it's held. */
+data class RemoteKey(val code: Code, val down: Boolean, val repeat: Int = 0) {
+    enum class Code { Left, Right, Up, Down, Ok }
+}
+
+/**
+ * Moving the Favorite App [pkg] within [order]. [armed] is set by an OK press made in Move Mode, so the
+ * release of the long press that started it doesn't confirm straight away.
+ */
+data class MoveMode(val pkg: String, val order: List<String>, val armed: Boolean = false)
+
+/**
+ * The next Move Mode (null once OK confirms [MoveMode.order]) and whether the card must not see [key].
+ * The long press's own repeats and release go through: the card clears its long-click flag on that
+ * release, and would otherwise swallow the next OK instead of launching.
+ */
+fun MoveMode.on(key: RemoteKey): Pair<MoveMode?, Boolean> = when (key.code) {
+    RemoteKey.Code.Ok -> when {
+        key.down && key.repeat == 0 -> copy(armed = true) to true
+        key.down -> this to armed
+        armed -> null to true
+        else -> this to false
+    }
+    RemoteKey.Code.Left -> (if (key.down) copy(order = movedBy(order, pkg, -1)) else this) to true
+    RemoteKey.Code.Right -> (if (key.down) copy(order = movedBy(order, pkg, 1)) else this) to true
+    // Up and Down would take focus off the app being moved.
+    RemoteKey.Code.Up, RemoteKey.Code.Down -> this to true
+}
+
+/** [order] with [item] moved [by] places, or unchanged at either end. */
+fun movedBy(order: List<String>, item: String, by: Int): List<String> {
+    val from = order.indexOf(item)
+    val to = from + by
+    if (from < 0 || to !in order.indices) return order
+    return order.toMutableList().apply { add(to, removeAt(from)) }
+}
+
+private fun remoteKey(e: KeyEvent): RemoteKey? {
+    val code = when (e.key) {
+        Key.DirectionLeft -> RemoteKey.Code.Left
+        Key.DirectionRight -> RemoteKey.Code.Right
+        Key.DirectionUp -> RemoteKey.Code.Up
+        Key.DirectionDown -> RemoteKey.Code.Down
+        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> RemoteKey.Code.Ok
+        else -> return null
+    }
+    return RemoteKey(code, e.type == KeyEventType.KeyDown, e.nativeKeyEvent.repeatCount)
+}
+
 val FocusMemorySaver = Saver<FocusMemory?, String>(
     save = { it?.let { m -> "${m.rowId}\n${m.key}\n${m.index}" } },
     restore = { s -> s.split('\n').let { FocusMemory(it[0], it[1], it[2].toInt()) } },
@@ -78,20 +138,34 @@ fun MediaScreen(
     onRestored: () -> Unit,
     onFocusMemory: (FocusMemory) -> Unit,
     onLaunch: (String) -> Unit,
+    onReorderFavorites: (List<String>) -> Unit,
     onOpenMedia: (MediaItem) -> Unit,
 ) {
-    val apps = state.favoriteApps
     val status = homeStatus(state)
     val firstRowIndex = (if (showApps) 1 else 0) + (if (status != null) 1 else 0)
     val listState = rememberLazyListState()
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val requesters = remember { mutableMapOf<String, CardHandle>() }
     // App icons are rebuilt on every resume, so the restore keys on package names rather than the apps.
-    val appKeys = apps.map { it.packageName }
+    val appKeys = state.favoriteApps.map { it.packageName }
+
+    var move by remember { mutableStateOf<MoveMode?>(null) }
+    // A confirmed order, shown until the saved favorites catch up so the row doesn't flick back.
+    var confirmed by remember { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(appKeys) { confirmed = null }
+    val shownKeys = move?.order ?: confirmed ?: appKeys
+    val apps = state.favoriteApps.associateBy { it.packageName }.let { byPackage -> shownKeys.mapNotNull { byPackage[it] } }
+    BackHandler(enabled = move != null) { move = null }
+    LaunchedEffect(move?.order) {
+        val m = move ?: return@LaunchedEffect
+        withFrameNanos {}
+        requesters["$APPS_ROW/${m.pkg}"]?.view?.bringIntoView()
+    }
+
     var resumes by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumes++
-        onPauseOrDispose {}
+        onPauseOrDispose { move = null }
     }
 
     // Waits for window focus: until then, Android hands focus to the first tab and would undo the restore.
@@ -99,21 +173,20 @@ fun MediaScreen(
 
     // Re-run on resume and whenever rows reload; a no-op when the remembered card already has focus.
     LaunchedEffect(resumes, rows, appKeys, windowFocused) {
-        if (!windowFocused) return@LaunchedEffect
+        if (!windowFocused || move != null) return@LaunchedEffect
         val start = focusMemory()
         val m = start ?: FocusMemory(APPS_ROW, appKeys.firstOrNull() ?: return@LaunchedEffect, 0)
         if (m.rowId == APPS_ROW && !showApps) return@LaunchedEffect
         // A new activity hands initial focus to the tabs, so its first restore ignores where focus is.
         if (restoredOnce() && tabsHaveFocus()) return@LaunchedEffect
         val (lazyIndex, keys) = if (m.rowId == APPS_ROW) {
-            0 to appKeys
+            0 to shownKeys
         } else {
             val r = rows.indexOfFirst { it.id == m.rowId }.takeIf { it >= 0 } ?: return@LaunchedEffect
             firstRowIndex + r to rows[r].items.map { it.id }
         }
         if (keys.isEmpty()) return@LaunchedEffect
-        // The card may have left the row (e.g. an episode finished); fall back to the same position.
-        val index = keys.indexOf(m.key).takeIf { it >= 0 } ?: m.index.coerceIn(0, keys.lastIndex)
+        val index = restoreIndex(keys, m)
         // Gives up as soon as the user moves to another card, or OK would land on the card it pulled focus back to.
         val stillWanted = { sameCard(focusMemory(), start) }
         if (restoreFocus(listState, lazyIndex, { rowStates[m.rowId] }, index, stillWanted) { requesters["${m.rowId}/${keys[index]}"] }) {
@@ -140,10 +213,24 @@ fun MediaScreen(
                             AppCard(
                                 app = app,
                                 onClick = { onLaunch(app.packageName) },
+                                onLongClick = { move = MoveMode(app.packageName, shownKeys) },
+                                moving = move?.pkg == app.packageName,
                                 width = 132.dp,
                                 modifier = Modifier
                                     .remembered(requesters, "$APPS_ROW/${app.packageName}")
-                                    .onFocusChanged { if (it.hasFocus) onFocusMemory(FocusMemory(APPS_ROW, app.packageName, i)) },
+                                    .onFocusChanged { if (it.hasFocus) onFocusMemory(FocusMemory(APPS_ROW, app.packageName, i)) }
+                                    // Ahead of the card's own click handling, which only sees what this lets through.
+                                    .onPreviewKeyEvent { e ->
+                                        val m = move?.takeIf { it.pkg == app.packageName } ?: return@onPreviewKeyEvent false
+                                        val key = remoteKey(e) ?: return@onPreviewKeyEvent false
+                                        val (next, consumed) = m.on(key)
+                                        if (next == null) {
+                                            confirmed = m.order
+                                            onReorderFavorites(m.order)
+                                        }
+                                        move = next
+                                        consumed
+                                    },
                             )
                         }
                     }
