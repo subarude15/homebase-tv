@@ -17,8 +17,11 @@ android {
     }
 
     buildTypes {
+        // Unsigned here: sign-release.ps1 signs with the release key and its rotation lineage.
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 
