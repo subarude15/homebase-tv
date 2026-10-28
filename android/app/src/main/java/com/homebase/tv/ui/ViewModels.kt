@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val EMBY_PACKAGE = "com.mb.android"
+private const val TIVIMATE_PACKAGE = "ar.tvplayer.tv"
 
 /**
  * In-progress items resume through the extras Nuvio's own Google TV cards send, which start playback per
@@ -107,6 +108,11 @@ class LauncherViewModel(
 
     /** Falls back to opening the app itself when there's nothing to link to (e.g. Emby's server ID is missing). */
     fun open(item: MediaItem) {
+        // TiviMate has no channel deep links, so a favorite channel can only open the app.
+        if (item.source == "tivimate") {
+            appsRepo.launch(TIVIMATE_PACKAGE)
+            return
+        }
         if (item.source == "nuvio") {
             if (item.contentId == null || !appsRepo.start(nuvioIntent(item))) appsRepo.launch(NUVIO_PACKAGE)
             return

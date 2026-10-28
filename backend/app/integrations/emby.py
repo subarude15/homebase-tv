@@ -20,8 +20,8 @@ EPISODE_PREFIX = re.compile(r"^.*?\bS\d{1,3}\s?E\d{1,4}\b\s*[-–:.]?\s*", re.IG
 class MediaItem(BaseModel):
     id: str
     type: str
-    source: Literal["emby", "nuvio"] = "emby"
-    # Nuvio's content ID (IMDb "tt…" or "tmdb:…"); for episodes it's the show's.
+    source: Literal["emby", "nuvio", "tivimate"] = "emby"
+    # Nuvio's content ID (IMDb "tt…" or "tmdb:…"; for episodes it's the show's), or a favorite channel's stream ID.
     content_id: str | None = None
     title: str
     subtitle: str = ""

@@ -60,6 +60,15 @@ class HomeContractTest {
     }
 
     @Test
+    fun favoriteChannelParsesAndSaysWhereItGoes() {
+        val json = """{"id":"channel-91950","type":"Channel","source":"tivimate","content_id":"91950","title":"Dog TV",
+            "subtitle":"Opens TiviMate","image":"/api/channels/logo/91950"}"""
+        val channel = backendJson.decodeFromString(MediaItem.serializer(), json)
+        assertEquals("tivimate", channel.source)
+        assertEquals("Opens TiviMate", cardDetail(channel))
+    }
+
+    @Test
     fun cardAndFeaturedText() {
         val ep = MediaItem(
             id = "1", type = "Episode", title = "Bake Off", subtitle = "S7 E7 · Dessert Week",

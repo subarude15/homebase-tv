@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     emby_api_key: str = ""
     emby_user: str = ""
     trakt_client_id: str = ""
+    # Only used to look up favorite channel logos.
+    iptv_m3u_url: str = ""
+    # Favorite channel shortcuts in row order: comma-separated "streamID=Name".
+    iptv_channels: str = ""
     home_cache_seconds: int = 60
 
     @property

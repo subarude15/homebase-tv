@@ -12,9 +12,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Reques
 from . import db
 from .config import Settings
 from .integrations.emby import EmbyClient, ImageKind
+from .integrations.iptv import XtreamLogos, channel_row, parse_channels
 from .integrations.trakt import IMAGE_PATH, TraktClient
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 HOME_CACHE_KEY = "home"
 TRAKT_CACHE_KEY = "home_trakt"
 
@@ -49,8 +50,10 @@ def create_app(
     settings: Settings | None = None,
     emby_transport: httpx.AsyncBaseTransport | None = None,
     trakt_transport: httpx.AsyncBaseTransport | None = None,
+    iptv_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
+    channels = parse_channels(settings.iptv_channels)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -63,8 +66,12 @@ def create_app(
         app.state.trakt = (
             TraktClient(settings.trakt_client_id, app.state.db, trakt_transport) if settings.trakt_client_id else None
         )
+        app.state.logos = (
+            XtreamLogos(settings.iptv_m3u_url, {sid for sid, _ in channels}, iptv_transport)
+            if settings.iptv_m3u_url and channels else None
+        )
         yield
-        for client in (app.state.emby, app.state.trakt):
+        for client in (app.state.emby, app.state.trakt, app.state.logos):
             if client:
                 await client.close()
         app.state.db.close()
@@ -124,32 +131,48 @@ def create_app(
         if not payloads:
             raise HTTPException(status_code=502, detail="; ".join(e for _, _, e in results.values()))
         emby_rows = payloads.get(HOME_CACHE_KEY, {}).get("rows", [])
-        # Nuvio's rows go right after Emby's Continue Watching.
+        # Favorite Channels and Nuvio's rows go right after Emby's Continue Watching.
         split = 1 if emby_rows and emby_rows[0]["id"] == "continue_watching" else 0
+        favorites = [r.model_dump() for r in channel_row(channels, logos=request.app.state.logos is not None)]
+        inserted = favorites + payloads.get(TRAKT_CACHE_KEY, {}).get("rows", [])
         return {
             "server_id": payloads.get(HOME_CACHE_KEY, {}).get("server_id"),
-            "rows": emby_rows[:split] + payloads.get(TRAKT_CACHE_KEY, {}).get("rows", []) + emby_rows[split:],
+            "rows": emby_rows[:split] + inserted + emby_rows[split:],
             "updated_at": min(p["updated_at"] for p in payloads.values()),
             "stale": any(stale for _, stale, _ in results.values()),
         }
 
-    @app.get("/api/trakt/image", dependencies=[Depends(require_token)])
-    async def trakt_image(path: str = Query(pattern=IMAGE_PATH.pattern), trakt: TraktClient = Depends(require_trakt)):
-        # Trakt forbids hotlinking, so every image is fetched once and served from disk. Paths are content-hashed.
-        # ponytail: the image cache is never pruned; fine for a few hundred posters, add an LRU sweep if it grows.
-        file = settings.data_dir / "trakt-images" / hashlib.sha256(path.encode()).hexdigest()
+    async def disk_cached_image(folder: str, name: str, fetch: Callable[[], Awaitable[httpx.Response]]) -> Response:
+        """Fetches an image once and serves it from disk afterwards."""
+        # ponytail: the image cache is never pruned; fine for a few hundred images, add an LRU sweep if it grows.
+        file = settings.data_dir / folder / name
         if not file.exists():
             try:
-                r = await trakt.image(path)
-            except httpx.HTTPError as e:
-                raise HTTPException(status_code=502, detail="Trakt unavailable") from e
+                r = await fetch()
+            except (httpx.HTTPError, LookupError) as e:
+                raise HTTPException(status_code=502, detail="Image source unavailable") from e
             if r.status_code != 200:
                 raise HTTPException(status_code=404, detail="Image not found")
             file.parent.mkdir(parents=True, exist_ok=True)
             tmp = file.with_suffix(f".{secrets.token_hex(4)}")
             tmp.write_bytes(r.content)
             tmp.replace(file)
-        return Response(file.read_bytes(), media_type="image/webp", headers={"Cache-Control": "public, max-age=604800"})
+        data = file.read_bytes()
+        media_type = "image/png" if data.startswith(b"\x89PNG") else "image/webp" if data[8:12] == b"WEBP" else "image/jpeg"
+        return Response(data, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
+
+    @app.get("/api/trakt/image", dependencies=[Depends(require_token)])
+    async def trakt_image(path: str = Query(pattern=IMAGE_PATH.pattern), trakt: TraktClient = Depends(require_trakt)):
+        # Trakt forbids hotlinking. Paths are content-hashed, so a cached copy never goes stale.
+        return await disk_cached_image("trakt-images", hashlib.sha256(path.encode()).hexdigest(), lambda: trakt.image(path))
+
+    @app.get("/api/channels/logo/{stream_id}", dependencies=[Depends(require_token)])
+    async def channel_logo(stream_id: int, request: Request):
+        logos = request.app.state.logos
+        if logos is None or stream_id not in logos.wanted:
+            raise HTTPException(status_code=404, detail="Channel not found")
+        # Provider logo hosts are slow and often time out, so a logo that loaded once is kept.
+        return await disk_cached_image("channel-logos", str(stream_id), lambda: logos.logo(stream_id))
 
     @app.get("/api/image/{item_id}/{kind}", dependencies=[Depends(require_token)])
     async def image(

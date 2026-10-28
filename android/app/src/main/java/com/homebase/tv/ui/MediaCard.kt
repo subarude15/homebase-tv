@@ -52,8 +52,9 @@ fun MediaCard(item: MediaItem, shape: Shape, backendUrl: String, onClick: () -> 
                     AsyncImage(
                         model = imageUrl(backendUrl, item.image),
                         contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        // Channel logos have mixed shapes and must not be cropped.
+                        contentScale = if (item.type == "Channel") ContentScale.Fit else ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().padding(if (item.type == "Channel") 16.dp else 0.dp),
                     )
                 } else {
                     Text(
