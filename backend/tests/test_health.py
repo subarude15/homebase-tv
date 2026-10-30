@@ -15,6 +15,7 @@ def test_health_ok_without_token(tmp_path):
     assert body["status"] == "ok"
     assert body["database"] is True
     assert body["authenticated"] is False
+    assert "sources" not in body
 
 
 def test_health_and_app_report_canonical_version(tmp_path):
@@ -28,6 +29,7 @@ def test_health_reports_valid_token(tmp_path):
     with client(tmp_path) as c:
         body = c.get("/health", headers={"Authorization": "Bearer secret"}).json()
     assert body["authenticated"] is True
+    assert body["sources"] == {}
 
 
 def test_protected_endpoint_requires_token(tmp_path):
