@@ -9,14 +9,13 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
 
-from . import db
+from . import __version__ as VERSION, db
 from .config import Settings
 from .integrations.catalog import POSTER_FILE, NuvioCatalog
 from .integrations.emby import EmbyClient, ImageKind
 from .integrations.iptv import XtreamLogos, channel_row, parse_channels
 from .integrations.trakt import IMAGE_PATH, TraktClient
 
-VERSION = "0.4.0"
 HOME_CACHE_KEY = "home"
 TRAKT_CACHE_KEY = "home_trakt"
 CATALOG_CACHE_KEY = "home_catalog"
