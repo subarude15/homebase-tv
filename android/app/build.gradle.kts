@@ -12,8 +12,8 @@ android {
         applicationId = "com.homebase.tv"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = (findProperty("versionCode") as String? ?: "1").toInt()
+        versionName = findProperty("versionName") as String? ?: "0.1.0"
     }
 
     // Release builds are always unsigned: both local (android/sign-release.ps1) and CI (release.yml)

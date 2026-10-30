@@ -1,4 +1,5 @@
-# Builds and signs the release APK on v* tag pushes and uploads it as the homebase-release.apk artifact.
+# Builds and signs the release APK on v* tag pushes and uploads it as the homebase-release.apk artifact
+# and as a GitHub Release asset. versionName/versionCode come from the tag (vX.Y.Z -> X*10000+Y*100+Z).
 # Required repo secrets:
 #   HOMEBASE_KEYSTORE_BASE64   - base64 of the release keystore (.p12/.jks)
 #   HOMEBASE_KEYSTORE_PASSWORD - keystore password
@@ -14,7 +15,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -24,6 +25,16 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v5
+
+      - name: Derive version from tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then echo "::error::tag '$TAG' is not vMAJOR.MINOR.PATCH"; exit 1; fi
+          MAJOR=$((10#${BASH_REMATCH[1]})); MINOR=$((10#${BASH_REMATCH[2]})); PATCH=$((10#${BASH_REMATCH[3]}))
+          if (( MINOR > 99 || PATCH > 99 )); then echo "::error::minor/patch must be <= 99 for versionCode encoding"; exit 1; fi
+          echo "VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v5
         with:
@@ -49,7 +60,7 @@ jobs:
 
       - name: Build unsigned release APK
         run: |
-          bash ./gradlew :app:assembleRelease --console=plain
+          bash ./gradlew :app:assembleRelease -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME" --console=plain
 
       - name: Sign release APK with rotation lineage
         env:
@@ -84,3 +95,11 @@ jobs:
           name: homebase-release.apk
           path: android/app/build/outputs/apk/release/homebase-release.apk
           if-no-files-found: error
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/release/homebase-release.apk
+          body: |
+            Homebase TV ${{ github.ref_name }} (versionCode ${{ env.VERSION_CODE }})
+            Commit: ${{ github.sha }}
+          fail_on_unmatched_files: true
