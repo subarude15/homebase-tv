@@ -19,6 +19,18 @@ from .integrations.trakt import IMAGE_PATH, TraktClient
 HOME_CACHE_KEY = "home"
 TRAKT_CACHE_KEY = "home_trakt"
 CATALOG_CACHE_KEY = "home_catalog"
+SOURCE_NAMES = {HOME_CACHE_KEY: "emby", TRAKT_CACHE_KEY: "trakt", CATALOG_CACHE_KEY: "catalog"}
+
+
+def safe_error(e: BaseException) -> str:
+    """A short failure reason that never carries upstream URLs, bodies or credentials."""
+    if isinstance(e, httpx.TimeoutException):
+        return "timed out"
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"HTTP {e.response.status_code}"
+    if type(e) is LookupError:  # only raised with our own fixed messages
+        return str(e)[:200]
+    return type(e).__name__
 
 
 def token_ok(settings: Settings, authorization: str | None) -> bool:
@@ -82,23 +94,48 @@ def create_app(
     app = FastAPI(title="Homebase TV", version=VERSION, lifespan=lifespan)
     app.state.settings = settings
     app.state.started = time.monotonic()
+    refreshes: dict[str, asyncio.Task] = {}
+    # Last finished refresh per cache key: a sanitized error, or None when it succeeded.
+    last_errors: dict[str, str | None] = {}
+
+    def source_status(conn, key: str) -> dict:
+        cached = db.cache_get(conn, key)
+        task = refreshes.get(key)
+        return {
+            "cache_age_seconds": int(time.time() - cached[1]) if cached else None,
+            "refreshing": bool(task and not task.done()),
+            "stale": bool(last_errors.get(key)),
+            "error": last_errors.get(key),
+        }
 
     @app.get("/health")
     async def health(request: Request, authorization: str | None = Header(default=None)):
-        db_ok = db.is_healthy(request.app.state.db)
-        return {
+        conn = request.app.state.db
+        db_ok = db.is_healthy(conn)
+        authenticated = token_ok(settings, authorization)
+        body = {
             "status": "ok" if db_ok else "degraded",
             "version": VERSION,
             "uptime_seconds": int(time.monotonic() - request.app.state.started),
             "database": db_ok,
-            "authenticated": token_ok(settings, authorization),
+            "authenticated": authenticated,
         }
+        if authenticated and db_ok:
+            state = request.app.state
+            configured = {HOME_CACHE_KEY: state.emby, TRAKT_CACHE_KEY: state.trakt, CATALOG_CACHE_KEY: state.catalog}
+            body["sources"] = {SOURCE_NAMES[k]: source_status(conn, k) for k, client in configured.items() if client}
+            if state.trakt:
+                body["sources"]["trakt"]["signed_in"] = state.trakt.token() is not None
+        return body
 
     @app.get("/api/ping", dependencies=[Depends(require_token)])
     async def ping():
         return {"pong": True}
 
-    refreshes: dict[str, asyncio.Task] = {}
+    def record(key: str, task: asyncio.Task) -> None:
+        if not task.cancelled():
+            e = task.exception()
+            last_errors[key] = safe_error(e) if e else None
 
     async def refresh(conn, key: str, fetch: Callable[[], Awaitable[dict]]) -> dict:
         payload = {**await fetch(), "updated_at": int(time.time())}
@@ -118,17 +155,19 @@ def create_app(
         started = task is None or task.done()
         if started:
             task = refreshes[key] = asyncio.create_task(refresh(conn, key, fetch))
-            # Marks a failure as handled when nobody is still waiting on it.
-            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            # Also marks a failure as handled when nobody is still waiting on it.
+            task.add_done_callback(lambda t: record(key, t))
         # Only the request that started a refresh waits for it; the rest get the last copy straight away.
         wait = (settings.home_refresh_wait_seconds if started else 0) if cached or optional else None
         try:
             # shield: a slow refresh keeps running for the next request instead of being cancelled.
             payload = await asyncio.wait_for(asyncio.shield(task), wait)
         except TimeoutError:
-            return (json.loads(cached[0]) if cached else None), False, ""
+            # Still refreshing: the last copy is only stale if the previous refresh failed too.
+            error = last_errors.get(key) or ""
+            return (json.loads(cached[0]) if cached else None), bool(error), error
         except (httpx.HTTPError, LookupError) as e:
-            return (json.loads(cached[0]) if cached else None), True, str(e)
+            return (json.loads(cached[0]) if cached else None), True, safe_error(e)
         return payload, False, ""
 
     async def emby_payload() -> dict:
@@ -159,7 +198,8 @@ def create_app(
         results = dict(zip(sources, await asyncio.gather(*sources.values())))
         payloads = {k: p for k, (p, _, _) in results.items() if p}
         if not payloads:
-            raise HTTPException(status_code=502, detail="; ".join(e for _, _, e in results.values()))
+            raise HTTPException(status_code=502, detail="; ".join(
+                f"{SOURCE_NAMES[k]}: {e}" for k, (_, _, e) in results.items() if e))
         emby_rows = payloads.get(HOME_CACHE_KEY, {}).get("rows", [])
         # Favorite Channels and Nuvio's rows go right after Emby's Continue Watching.
         split = 1 if emby_rows and emby_rows[0]["id"] == "continue_watching" else 0
