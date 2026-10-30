@@ -21,6 +21,8 @@ import com.homebase.tv.data.settings.Settings
 import com.homebase.tv.data.settings.SettingsRepository
 import com.homebase.tv.data.settings.TvName
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -132,8 +134,9 @@ class LauncherViewModel(
 sealed interface ConnectionStatus {
     data object Idle : ConnectionStatus
     data object Testing : ConnectionStatus
-    data class Ok(val health: Health) : ConnectionStatus
-    data class Failed(val message: String) : ConnectionStatus
+    /** [checkedAt] is epoch millis. */
+    data class Ok(val health: Health, val checkedAt: Long) : ConnectionStatus
+    data class Failed(val message: String, val checkedAt: Long) : ConnectionStatus
 }
 
 class SettingsViewModel(
@@ -145,13 +148,31 @@ class SettingsViewModel(
 
     val status = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Idle)
 
+    private var check: Job? = null
+
     fun saveAndTest(url: String, token: String, tvName: TvName) {
         viewModelScope.launch {
             settingsRepo.saveConnection(url, token, tvName)
-            status.value = ConnectionStatus.Testing
-            status.value = backend.health(url, token).fold(
-                onSuccess = { ConnectionStatus.Ok(it) },
-                onFailure = { ConnectionStatus.Failed(it.message ?: it::class.simpleName.orEmpty()) },
+            test(url, token)
+        }
+    }
+
+    /** Checks the saved connection, ignoring unsaved edits. */
+    fun testSaved() {
+        viewModelScope.launch { settingsRepo.settings.first().let { test(it.backendUrl, it.apiToken) } }
+    }
+
+    /** Only the newest check may report, so a slow earlier one can't overwrite it. */
+    private fun test(url: String, token: String) {
+        check?.cancel()
+        status.value = ConnectionStatus.Testing
+        check = viewModelScope.launch {
+            val result = backend.health(url, token)
+            ensureActive()
+            val now = System.currentTimeMillis()
+            status.value = result.fold(
+                onSuccess = { ConnectionStatus.Ok(it, now) },
+                onFailure = { ConnectionStatus.Failed(it.message ?: it::class.simpleName.orEmpty(), now) },
             )
         }
     }
