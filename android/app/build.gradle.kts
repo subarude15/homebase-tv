@@ -16,12 +16,30 @@ android {
         versionName = "0.1.0"
     }
 
+    // CI only (release.yml): signs in Gradle when HOMEBASE_KEYSTORE_FILE is set. Without it the release
+    // APK stays unsigned for sign-release.ps1. This path has no rotation lineage.
+    val ciKeystore = providers.environmentVariable("HOMEBASE_KEYSTORE_FILE").orNull
+    if (ciKeystore != null) {
+        signingConfigs {
+            create("ciRelease") {
+                storeFile = file(ciKeystore)
+                storePassword = providers.environmentVariable("HOMEBASE_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("HOMEBASE_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("HOMEBASE_KEY_PASSWORD").get()
+                enableV1Signing = false
+                enableV2Signing = false
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
-        // Unsigned here: sign-release.ps1 signs with the release key and its rotation lineage.
+        // Unsigned locally: sign-release.ps1 signs with the release key and its rotation lineage.
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            if (ciKeystore != null) signingConfig = signingConfigs.getByName("ciRelease")
         }
     }
 
