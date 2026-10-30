@@ -3,11 +3,14 @@ package com.homebase.tv
 import com.homebase.tv.data.backend.Health
 import com.homebase.tv.data.backend.backendJson
 import com.homebase.tv.ui.ConnectionStatus
+import com.homebase.tv.ui.deviceZone
 import com.homebase.tv.ui.statusDetail
 import com.homebase.tv.ui.statusHeadline
 import com.homebase.tv.ui.uptimeText
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -59,6 +62,22 @@ class DiagnosticsTest {
         assertEquals("timeout · Checked 08:57:03", statusDetail(failed, ZoneOffset.ofHours(-4)))
         assertEquals("Checking backend…", statusHeadline(ConnectionStatus.Testing))
         assertEquals("", statusDetail(ConnectionStatus.Testing))
+    }
+
+    @Test
+    fun checkedTimeIgnoresStaleCachedZone() {
+        val savedZone = TimeZone.getDefault()
+        val savedProp = System.getProperty("user.timezone")
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+            System.setProperty("user.timezone", "America/New_York")
+            assertEquals(ZoneId.of("America/New_York"), deviceZone())
+            val failed = ConnectionStatus.Failed("timeout", checkedAt)
+            assertEquals("timeout · Checked 08:57:03", statusDetail(failed))
+        } finally {
+            System.setProperty("user.timezone", savedProp)
+            TimeZone.setDefault(savedZone)
+        }
     }
 
     @Test

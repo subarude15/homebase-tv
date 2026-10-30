@@ -45,6 +45,7 @@ import com.homebase.tv.data.settings.TvName
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.TimeZone
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -92,7 +93,16 @@ internal fun statusHeadline(status: ConnectionStatus): String = when (status) {
     is ConnectionStatus.Failed -> "Can't reach backend"
 }
 
-internal fun statusDetail(status: ConnectionStatus, zone: ZoneId = ZoneId.systemDefault()): String = when (status) {
+/**
+ * The process caches TimeZone.getDefault() and Android only clears it on a timezone-change broadcast,
+ * so a zone applied without one (or before the process cached UTC) would never show up. Re-resolve it.
+ */
+internal fun deviceZone(): ZoneId {
+    TimeZone.setDefault(null)
+    return ZoneId.systemDefault()
+}
+
+internal fun statusDetail(status: ConnectionStatus, zone: ZoneId = deviceZone()): String = when (status) {
     ConnectionStatus.Idle, ConnectionStatus.Testing -> ""
     is ConnectionStatus.Ok -> with(status.health) {
         listOfNotNull(
