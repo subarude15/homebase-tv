@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import __version__
 from app.config import Settings
 from app.main import create_app
 
@@ -14,6 +15,13 @@ def test_health_ok_without_token(tmp_path):
     assert body["status"] == "ok"
     assert body["database"] is True
     assert body["authenticated"] is False
+
+
+def test_health_and_app_report_canonical_version(tmp_path):
+    with client(tmp_path) as c:
+        assert __version__ == "0.4.0"
+        assert c.app.version == __version__
+        assert c.get("/health").json()["version"] == __version__
 
 
 def test_health_reports_valid_token(tmp_path):
