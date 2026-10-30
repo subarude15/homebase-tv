@@ -20,6 +20,7 @@ data class Health(
     val version: String,
     val database: Boolean,
     val authenticated: Boolean,
+    @SerialName("uptime_seconds") val uptimeSeconds: Long? = null,
 )
 
 @Serializable

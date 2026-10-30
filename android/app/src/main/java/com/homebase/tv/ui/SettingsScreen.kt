@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +42,16 @@ import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.homebase.tv.data.settings.TvName
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: SettingsViewModel) {
     val saved by vm.settings.collectAsStateWithLifecycle()
     val status by vm.status.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.testSaved() }
     val s = saved ?: return
 
     var url by remember(s.backendUrl) { mutableStateOf(s.backendUrl) }
@@ -62,23 +67,61 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 FilterChip(selected = t == tvName, onClick = { tvName = t }) { Text(t.label) }
             }
         }
-        Button(onClick = { vm.saveAndTest(url, token, tvName) }) { Text("Save & test connection") }
-        Text(statusText(status))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { vm.saveAndTest(url, token, tvName) }) { Text("Save & test connection") }
+            Button(onClick = vm::testSaved) { Text("Test saved connection") }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(statusHeadline(status), style = MaterialTheme.typography.titleMedium)
+            Text(statusDetail(status), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
-private fun statusText(status: ConnectionStatus): String = when (status) {
+internal fun statusHeadline(status: ConnectionStatus): String = when (status) {
     ConnectionStatus.Idle -> ""
-    ConnectionStatus.Testing -> "Testing…"
+    ConnectionStatus.Testing -> "Checking backend…"
     is ConnectionStatus.Ok -> with(status.health) {
         when {
-            !authenticated -> "Reached backend v$version, but the API token was rejected"
-            !database -> "Connected to backend v$version, but its database is unhealthy"
-            else -> "Connected to backend v$version"
+            !authenticated -> "Connected, but the API token was rejected"
+            !database -> "Backend degraded: database unhealthy"
+            this.status != "ok" -> "Backend degraded"
+            else -> "Backend healthy"
         }
     }
-    is ConnectionStatus.Failed -> "Could not reach backend: ${status.message}"
+    is ConnectionStatus.Failed -> "Can't reach backend"
 }
+
+internal fun statusDetail(status: ConnectionStatus, zone: ZoneId = ZoneId.systemDefault()): String = when (status) {
+    ConnectionStatus.Idle, ConnectionStatus.Testing -> ""
+    is ConnectionStatus.Ok -> with(status.health) {
+        listOfNotNull(
+            "Version $version",
+            "Database ${if (database) "OK" else "unhealthy"}",
+            "Token ${if (authenticated) "accepted" else "rejected"}",
+            uptimeSeconds?.let { "Up ${uptimeText(it)}" },
+            checkedText(status.checkedAt, zone),
+        ).joinToString(" · ")
+    }
+    is ConnectionStatus.Failed -> "${status.message} · ${checkedText(status.checkedAt, zone)}"
+}
+
+internal fun uptimeText(seconds: Long): String {
+    val d = seconds / 86_400
+    val h = seconds % 86_400 / 3_600
+    val m = seconds % 3_600 / 60
+    return when {
+        d > 0 -> "${d}d ${h}h"
+        h > 0 -> "${h}h ${m}m"
+        m > 0 -> "${m}m"
+        else -> "${seconds}s"
+    }
+}
+
+private val clock = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+private fun checkedText(epochMillis: Long, zone: ZoneId) =
+    "Checked " + clock.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
 
 @Composable
 private fun Field(
