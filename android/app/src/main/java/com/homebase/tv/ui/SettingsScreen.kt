@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,16 +43,19 @@ import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.homebase.tv.data.settings.TvName
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.TimeZone
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: SettingsViewModel) {
     val saved by vm.settings.collectAsStateWithLifecycle()
     val status by vm.status.collectAsStateWithLifecycle()
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(1_000)
+            value = System.currentTimeMillis()
+        }
+    }
     LaunchedEffect(Unit) { vm.testSaved() }
     val s = saved ?: return
 
@@ -74,7 +78,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(statusHeadline(status), style = MaterialTheme.typography.titleMedium)
-            Text(statusDetail(status), style = MaterialTheme.typography.bodyMedium)
+            Text(statusDetail(status, now), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -93,16 +97,8 @@ internal fun statusHeadline(status: ConnectionStatus): String = when (status) {
     is ConnectionStatus.Failed -> "Can't reach backend"
 }
 
-/**
- * The process caches TimeZone.getDefault() and Android only clears it on a timezone-change broadcast,
- * so a zone applied without one (or before the process cached UTC) would never show up. Re-resolve it.
- */
-internal fun deviceZone(): ZoneId {
-    TimeZone.setDefault(null)
-    return ZoneId.systemDefault()
-}
-
-internal fun statusDetail(status: ConnectionStatus, zone: ZoneId = deviceZone()): String = when (status) {
+/** Relative age, not wall-clock time: the TV process's default timezone is unreliable. */
+internal fun statusDetail(status: ConnectionStatus, now: Long): String = when (status) {
     ConnectionStatus.Idle, ConnectionStatus.Testing -> ""
     is ConnectionStatus.Ok -> with(status.health) {
         listOfNotNull(
@@ -110,10 +106,10 @@ internal fun statusDetail(status: ConnectionStatus, zone: ZoneId = deviceZone())
             "Database ${if (database) "OK" else "unhealthy"}",
             "Token ${if (authenticated) "accepted" else "rejected"}",
             uptimeSeconds?.let { "Up ${uptimeText(it)}" },
-            checkedText(status.checkedAt, zone),
+            checkedText(status.checkedAt, now),
         ).joinToString(" · ")
     }
-    is ConnectionStatus.Failed -> "${status.message} · ${checkedText(status.checkedAt, zone)}"
+    is ConnectionStatus.Failed -> "${status.message} · ${checkedText(status.checkedAt, now)}"
 }
 
 internal fun uptimeText(seconds: Long): String {
@@ -128,10 +124,10 @@ internal fun uptimeText(seconds: Long): String {
     }
 }
 
-private val clock = DateTimeFormatter.ofPattern("HH:mm:ss")
-
-private fun checkedText(epochMillis: Long, zone: ZoneId) =
-    "Checked " + clock.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
+private fun checkedText(checkedAt: Long, now: Long): String {
+    val age = (now - checkedAt).coerceAtLeast(0) / 1_000
+    return if (age < 5) "Checked just now" else "Checked ${uptimeText(age)} ago"
+}
 
 @Composable
 private fun Field(

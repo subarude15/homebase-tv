@@ -3,14 +3,10 @@ package com.homebase.tv
 import com.homebase.tv.data.backend.Health
 import com.homebase.tv.data.backend.backendJson
 import com.homebase.tv.ui.ConnectionStatus
-import com.homebase.tv.ui.deviceZone
 import com.homebase.tv.ui.statusDetail
 import com.homebase.tv.ui.statusHeadline
 import com.homebase.tv.ui.uptimeText
 import java.time.Instant
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -33,8 +29,8 @@ class DiagnosticsTest {
         val status = ok(Health("ok", "1.4.0", database = true, authenticated = true, uptimeSeconds = 93_784))
         assertEquals("Backend healthy", statusHeadline(status))
         assertEquals(
-            "Version 1.4.0 · Database OK · Token accepted · Up 1d 2h · Checked 12:57:03",
-            statusDetail(status, ZoneOffset.UTC),
+            "Version 1.4.0 · Database OK · Token accepted · Up 1d 2h · Checked just now",
+            statusDetail(status, checkedAt),
         )
     }
 
@@ -43,41 +39,31 @@ class DiagnosticsTest {
         val unauthenticated = ok(Health("ok", "1.4.0", database = true, authenticated = false))
         assertEquals("Connected, but the API token was rejected", statusHeadline(unauthenticated))
         assertEquals(
-            "Version 1.4.0 · Database OK · Token rejected · Checked 12:57:03",
-            statusDetail(unauthenticated, ZoneOffset.UTC),
+            "Version 1.4.0 · Database OK · Token rejected · Checked just now",
+            statusDetail(unauthenticated, checkedAt + 4_999),
         )
         val degraded = ok(Health("degraded", "1.4.0", database = false, authenticated = true, uptimeSeconds = 42))
         assertEquals("Backend degraded: database unhealthy", statusHeadline(degraded))
         assertEquals(
-            "Version 1.4.0 · Database unhealthy · Token accepted · Up 42s · Checked 12:57:03",
-            statusDetail(degraded, ZoneOffset.UTC),
+            "Version 1.4.0 · Database unhealthy · Token accepted · Up 42s · Checked 5s ago",
+            statusDetail(degraded, checkedAt + 5_000),
         )
         assertEquals("Backend degraded", statusHeadline(ok(Health("degraded", "1.4.0", true, true))))
     }
 
     @Test
-    fun failureKeepsMessageAndCheckedTime() {
+    fun failureKeepsMessageAndCheckedAge() {
         val failed = ConnectionStatus.Failed("timeout", checkedAt)
         assertEquals("Can't reach backend", statusHeadline(failed))
-        assertEquals("timeout · Checked 08:57:03", statusDetail(failed, ZoneOffset.ofHours(-4)))
+        assertEquals("timeout · Checked 2m ago", statusDetail(failed, checkedAt + 150_000))
+        assertEquals("timeout · Checked 1h 1m ago", statusDetail(failed, checkedAt + 3_660_000))
         assertEquals("Checking backend…", statusHeadline(ConnectionStatus.Testing))
-        assertEquals("", statusDetail(ConnectionStatus.Testing))
+        assertEquals("", statusDetail(ConnectionStatus.Testing, checkedAt))
     }
 
     @Test
-    fun checkedTimeIgnoresStaleCachedZone() {
-        val savedZone = TimeZone.getDefault()
-        val savedProp = System.getProperty("user.timezone")
-        try {
-            TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-            System.setProperty("user.timezone", "America/New_York")
-            assertEquals(ZoneId.of("America/New_York"), deviceZone())
-            val failed = ConnectionStatus.Failed("timeout", checkedAt)
-            assertEquals("timeout · Checked 08:57:03", statusDetail(failed))
-        } finally {
-            System.setProperty("user.timezone", savedProp)
-            TimeZone.setDefault(savedZone)
-        }
+    fun clockBehindCheckIsJustNow() {
+        assertEquals("timeout · Checked just now", statusDetail(ConnectionStatus.Failed("timeout", checkedAt), checkedAt - 60_000))
     }
 
     @Test
