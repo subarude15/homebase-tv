@@ -4,7 +4,9 @@
 #   HOMEBASE_KEYSTORE_PASSWORD - keystore password
 #   HOMEBASE_KEY_ALIAS         - key alias (e.g. homebase-release)
 #   HOMEBASE_KEY_PASSWORD      - key password
-# CI signs v3-only without the debug -> release rotation lineage; local releases still use android/sign-release.ps1.
+#   HOMEBASE_LINEAGE_BASE64    - base64 of debug-to-release.lineage (enables debug->release in-place upgrades)
+# Gradle produces an unsigned release APK; apksigner then signs it WITH the debug->release rotation
+# lineage, matching the local android/sign-release.ps1 behaviour exactly.
 name: release
 
 on:
@@ -34,17 +36,48 @@ jobs:
           HOMEBASE_KEYSTORE_BASE64: ${{ secrets.HOMEBASE_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$HOMEBASE_KEYSTORE_BASE64" ]; then echo "::error::HOMEBASE_KEYSTORE_BASE64 secret is not set"; exit 1; fi
-          echo "$HOMEBASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/homebase-release.keystore"
-          echo "HOMEBASE_KEYSTORE_FILE=$RUNNER_TEMP/homebase-release.keystore" >> "$GITHUB_ENV"
+          echo "$HOMEBASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/homebase-release.p12"
+          echo "HOMEBASE_KEYSTORE_FILE=$RUNNER_TEMP/homebase-release.p12" >> "$GITHUB_ENV"
 
-      - name: Build signed release APK
+      - name: Materialize rotation lineage
+        env:
+          HOMEBASE_LINEAGE_BASE64: ${{ secrets.HOMEBASE_LINEAGE_BASE64 }}
+        run: |
+          if [ -z "$HOMEBASE_LINEAGE_BASE64" ]; then echo "::error::HOMEBASE_LINEAGE_BASE64 secret is not set"; exit 1; fi
+          echo "$HOMEBASE_LINEAGE_BASE64" | base64 -d > "$RUNNER_TEMP/debug-to-release.lineage"
+          echo "HOMEBASE_LINEAGE_FILE=$RUNNER_TEMP/debug-to-release.lineage" >> "$GITHUB_ENV"
+
+      - name: Build unsigned release APK
+        run: |
+          bash ./gradlew :app:assembleRelease --console=plain
+
+      - name: Sign release APK with rotation lineage
         env:
           HOMEBASE_KEYSTORE_PASSWORD: ${{ secrets.HOMEBASE_KEYSTORE_PASSWORD }}
           HOMEBASE_KEY_ALIAS: ${{ secrets.HOMEBASE_KEY_ALIAS }}
           HOMEBASE_KEY_PASSWORD: ${{ secrets.HOMEBASE_KEY_PASSWORD }}
         run: |
-          bash ./gradlew :app:assembleRelease --console=plain
-          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/homebase-release.apk
+          set -euo pipefail
+          IN="app/build/outputs/apk/release/app-release-unsigned.apk"
+          OUT="app/build/outputs/apk/release/homebase-release.apk"
+          test -f "$IN" || { echo "::error::unsigned APK missing at $IN"; exit 1; }
+          # Pick the newest installed build-tools rather than pinning a version.
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -1)"
+          test -n "$APKSIGNER" || { echo "::error::apksigner not found under $ANDROID_HOME/build-tools"; exit 1; }
+          echo "using apksigner: $APKSIGNER"
+          # v3 only (minSdk 28); lineage lets it upgrade debug-signed installs in place.
+          "$APKSIGNER" sign \
+            --ks "$HOMEBASE_KEYSTORE_FILE" \
+            --ks-key-alias "$HOMEBASE_KEY_ALIAS" \
+            --ks-pass env:HOMEBASE_KEYSTORE_PASSWORD \
+            --key-pass env:HOMEBASE_KEY_PASSWORD \
+            --lineage "$HOMEBASE_LINEAGE_FILE" \
+            --rotation-min-sdk-version 28 \
+            --v1-signing-enabled false \
+            --v2-signing-enabled false \
+            --v3-signing-enabled true \
+            --out "$OUT" "$IN"
+          "$APKSIGNER" verify --min-sdk-version 28 --print-certs -v "$OUT"
 
       - uses: actions/upload-artifact@v4
         with:
