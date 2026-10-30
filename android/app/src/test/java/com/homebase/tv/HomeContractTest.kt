@@ -4,6 +4,7 @@ import com.homebase.tv.data.backend.HomeResponse
 import com.homebase.tv.data.backend.MediaItem
 import com.homebase.tv.data.backend.embyLink
 import com.homebase.tv.data.backend.nuvioLink
+import com.homebase.tv.data.backend.nuvioStreams
 import com.homebase.tv.data.backend.nuvioVideoId
 import com.homebase.tv.ui.cardDetail
 import com.homebase.tv.ui.durationText
@@ -81,6 +82,20 @@ class HomeContractTest {
         assertEquals("nuvio://movie/tmdb:155", nuvioLink(movie))
         assertEquals("tmdb:155", nuvioVideoId(movie))
         assertEquals("emby", MediaItem(id = "e", type = "Movie", title = "").source)
+    }
+
+    @Test
+    fun nuvioStreamsNextUpAndResumesButOpensDetailsOtherwise() {
+        fun item(type: String, progress: Float? = null, season: Int? = null, episode: Int? = null) =
+            MediaItem(id = "x", type = type, source = "nuvio", contentId = "tt1", title = "", season = season, episode = episode, progress = progress)
+        assertEquals(true, nuvioStreams(item("Episode", season = 1, episode = 2)))
+        assertEquals(true, nuvioStreams(item("Episode", progress = 0.4f, season = 1, episode = 2)))
+        assertEquals(true, nuvioStreams(item("Movie", progress = 0.4f)))
+        assertEquals(false, nuvioStreams(item("Movie")))
+        assertEquals(false, nuvioStreams(item("Series")))
+        assertEquals(false, nuvioStreams(item("Series", season = 1, episode = 2)))
+        assertEquals(false, nuvioStreams(item("Episode", season = 1)))
+        assertEquals(false, nuvioStreams(item("Episode", episode = 2)))
     }
 
     @Test

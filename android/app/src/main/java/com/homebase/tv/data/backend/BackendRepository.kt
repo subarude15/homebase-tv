@@ -72,6 +72,10 @@ val MediaItem.nuvioType get() = if (type == "Movie") "movie" else "series"
 /** Nuvio's detail page; [MediaItem.contentId] is an IMDb ID or "tmdb:…", both of which Nuvio accepts here. */
 fun nuvioLink(item: MediaItem): String = "nuvio://${item.nuvioType}/${item.contentId}"
 
+/** Starts the exact video: anything in progress, or a next-up episode; other items open their detail page. */
+fun nuvioStreams(item: MediaItem): Boolean =
+    item.isPlayable && (item.progress != null || (item.type == "Episode" && item.season != null && item.episode != null))
+
 /** Nuvio's ID for the exact video: the movie's own ID, or "show:season:episode". */
 fun nuvioVideoId(item: MediaItem): String =
     if (item.season != null && item.episode != null) "${item.contentId}:${item.season}:${item.episode}" else item.contentId.orEmpty()

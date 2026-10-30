@@ -13,8 +13,8 @@ import com.homebase.tv.data.backend.HomeResult
 import com.homebase.tv.data.backend.MediaItem
 import com.homebase.tv.data.backend.NUVIO_PACKAGE
 import com.homebase.tv.data.backend.embyLink
-import com.homebase.tv.data.backend.isPlayable
 import com.homebase.tv.data.backend.nuvioLink
+import com.homebase.tv.data.backend.nuvioStreams
 import com.homebase.tv.data.backend.nuvioType
 import com.homebase.tv.data.backend.nuvioVideoId
 import com.homebase.tv.data.settings.Settings
@@ -39,11 +39,11 @@ private const val EMBY_PACKAGE = "com.mb.android"
 private const val TIVIMATE_PACKAGE = "ar.tvplayer.tv"
 
 /**
- * In-progress items resume through the extras Nuvio's own Google TV cards send, which start playback per
+ * Streamed items ([nuvioStreams]) use the extras Nuvio's own Google TV cards send, which start playback per
  * Nuvio's auto-play setting; everything else opens its detail page.
  */
 private fun nuvioIntent(item: MediaItem): Intent =
-    if (item.progress != null && item.isPlayable) {
+    if (nuvioStreams(item)) {
         Intent(Intent.ACTION_VIEW)
             .setClassName(NUVIO_PACKAGE, "$NUVIO_PACKAGE.MainActivity")
             .putExtra("launchMode", "stream")
